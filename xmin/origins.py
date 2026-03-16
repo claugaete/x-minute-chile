@@ -40,11 +40,11 @@ class Origins:
         self.h3_grid = h3fy(bounds, resolution=self.h3_level)
         if population_gdf is not None:
             if not (
-                "population" in self.amenity_gdf.columns
-                and "geometry" in self.amenity_gdf.columns
+                "population" in population_gdf.columns
+                and "geometry" in population_gdf.columns
             ):
                 raise ValueError(
-                    "`amenity_gdf` debe tener al menos las columnas "
+                    "`population_gdf` debe tener al menos las columnas "
                     "`population` y `geometry`"
                 )
             self._overlay_population_h3(population_gdf)
