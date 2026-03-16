@@ -26,6 +26,14 @@ class Amenity:
         self.amenity_gdf.geometry = self.amenity_gdf.geometry.to_crs(
             xmin.projected_crs
         ).centroid.to_crs(original_crs)
+        
+    def get_pois(self, osm: pyrosm.OSM):
+        """
+        Cargar POIs para la necesidad a partir de un objeto de OpenStreetMap.
+        No-op por defecto (para Amenities que ya tengan sus elementos
+        pre-cargados).
+        """
+        pass
 
 
 class CustomAmenity(Amenity):
@@ -109,7 +117,7 @@ class OsmAmenity(Amenity):
 
     def get_pois(self, osm: pyrosm.OSM):
 
-        self.amenity_gdf = osm.get_pois(self.osm_filter)
+        self.amenity_gdf: gpd.GeoDataFrame = osm.get_pois(self.osm_filter)
         if self.use_area_as_weight:
             self.amenity_gdf["weight"] = self.amenity_gdf.to_crs(
                 xmin.projected_crs
