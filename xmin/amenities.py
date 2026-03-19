@@ -13,8 +13,9 @@ class Amenity:
     específica.
     """
 
-    def __init__(self, amenity_gdf: gpd.GeoDataFrame | None):
+    def __init__(self, name: str, amenity_gdf: gpd.GeoDataFrame | None):
 
+        self.name = name
         self.amenity_gdf = amenity_gdf
 
     def _convert_geometries_to_centroids(self):
@@ -42,7 +43,7 @@ class CustomAmenity(Amenity):
     manualmente.
     """
 
-    def __init__(self, amenity_gdf: gpd.GeoDataFrame):
+    def __init__(self, name: str, amenity_gdf: gpd.GeoDataFrame):
         """
         Parameters
         ---
@@ -55,7 +56,7 @@ class CustomAmenity(Amenity):
             usando su centroide.
         """
 
-        super().__init__(amenity_gdf)
+        super().__init__(name, amenity_gdf)
 
         if not (
             "id" in self.amenity_gdf.columns
@@ -86,6 +87,7 @@ class OsmAmenity(Amenity):
 
     def __init__(
         self,
+        name: str,
         osm_filter: dict,
         use_area_as_weight: bool = False,
         area_to_weight_function: Callable[[float], float] = lambda x: x,
@@ -110,7 +112,7 @@ class OsmAmenity(Amenity):
             podrían no afectar al resultado final).
         """
 
-        super().__init__(amenity_gdf=None)
+        super().__init__(name, amenity_gdf=None)
         self.osm_filter = osm_filter
         self.use_area_as_weight = use_area_as_weight
         self.area_to_weight_function = area_to_weight_function

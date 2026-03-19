@@ -1,5 +1,4 @@
 import geopandas as gpd
-from shapely import Polygon
 from tobler.util import h3fy
 
 import xmin
@@ -13,16 +12,16 @@ class Origins:
 
     def __init__(
         self,
-        bounds: Polygon,
+        bounds: gpd.GeoDataFrame,
         h3_level: int = 8,
         population_gdf: gpd.GeoDataFrame | None = None,
     ):
         """
         Parameters
         ---
-        bounds : Polygon or MultiPolygon
-            Polígono (o colección de polígonos) que define los límites de las
-            regiones para las cuales se calcularán índices de accesibilidad
+        bounds : GeoDataFrame
+            GeoDataFrame con los límites de las regiones para las cuales se
+            calcularán índices de accesibilidad
         h3_level : int, default: 8
             Nivel de H3 que se utilizará para dividir las celdas. Más
             información en https://h3geo.org/docs/core-library/restable/
@@ -48,6 +47,7 @@ class Origins:
                     "`population` y `geometry`"
                 )
             self._overlay_population_h3(population_gdf)
+        self.h3_grid = self.h3_grid.rename_axis("id").reset_index()
 
     def _overlay_population_h3(
         self, population_gdf: gpd.GeoDataFrame
