@@ -27,7 +27,7 @@ class Amenity:
     """
 
     def __repr__(self):
-        return f"Amenity({self._name})"
+        return f"Amenity(name={self._name})"
 
     def __init__(self, name: str, amenity_gdf: gpd.GeoDataFrame | None):
         

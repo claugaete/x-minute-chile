@@ -1,146 +1,134 @@
-from collections.abc import Callable
-import datetime
-from pathlib import Path
+from abc import ABC, abstractmethod
 
 import geopandas as gpd
-import numpy as np
 import pandas as pd
-import r5py
 
-import xmin
 from xmin.amenities import Amenity
 from xmin.origins import Origins
 
 
-def try_snap_to_network(
-    transport_network: r5py.TransportNetwork,
-    point_gdf: gpd.GeoDataFrame,
-    area_gdf: gpd.GeoDataFrame | None = None,
-):
+class IndexFunction(ABC):
     """
-    TODO
+    Clase abstracta para una función de índice, que dados tiempos de viaje
+    desde orígenes hasta necesidades, calcula un número entre 0 y 1 indicando
+    la "accesibilidad" de cada origen a la necesidad en cuestión.
     """
 
-    snapped_points: gpd.GeoSeries = transport_network.snap_to_network(
-        point_gdf.geometry, street_mode=r5py.TransportMode.CAR
-    )
-
-    # if point is empty, or falls outside its designated area, undo snapping
-    # and return original point
-    return point_gdf.assign(
-        geometry=np.where(
-            snapped_points.is_empty
-            | (
-                area_gdf is not None
-                and ~area_gdf.contains(snapped_points.geometry)
-            ),
-            point_gdf.geometry,
-            snapped_points.geometry,
-        )
-    )
+    @abstractmethod
+    def calculate_index(
+        self,
+        travel_times: pd.DataFrame,
+        population: pd.Series,
+        amenity_weights: pd.Series,
+    ) -> pd.Series:
+        """
+        Calcula el índice desde cada origen, a partir de la información
+        entregada.
+        """
+        pass
 
 
-def calculate_amenity_index(
+def calculate_weighted_index(
     origins: Origins,
-    amenity: Amenity,
-    index_function: Callable[..., pd.Series],
-    gtfs_path: Path,
-    osm_path: Path,
-    snap_to_network: bool = False,
-    **index_function_kwargs,
-):
+    time_travel_matrices: dict[Amenity, pd.DataFrame],
+    index: IndexFunction | dict[Amenity, IndexFunction],
+    weights: dict[Amenity, IndexFunction] | None = None,
+) -> gpd.GeoDataFrame:
     """
     TODO
     """
-    
-    # load r5py and pois
-    transport_network = r5py.TransportNetwork(osm_path, gtfs_path)
 
-    origin_points_gdf = origins.h3_grid.assign(
-        geometry=origins.h3_grid.geometry.to_crs(
-            xmin.projected_crs
-        ).centroid.to_crs(4326)
-    )
+    population = origins.h3_grid.set_index("id")["population"]
 
-    amenity_gdf = amenity.amenity_gdf.copy()
-    if "weight" not in amenity_gdf.columns:
-        amenity_gdf["weight"] = 1
+    amenity_indices: dict[Amenity, pd.Series] = {}
 
-    if snap_to_network:
-        origin_points_gdf = try_snap_to_network(
-            transport_network, origin_points_gdf, origins.h3_grid
+    for amenity, ttm in time_travel_matrices.items():
+        amenity_gdf = amenity.amenity_gdf.set_index("id")
+        if "weight" not in amenity_gdf.columns:
+            amenity_gdf["weight"] = 1
+        amenity_indices[amenity] = index[amenity].calculate_index(
+            ttm, population, amenity_gdf["weight"]
         )
-        amenity_gdf = try_snap_to_network(transport_network, amenity_gdf)
 
-    travel_time_matrix = r5py.TravelTimeMatrix(
-        transport_network,
-        origins=origin_points_gdf,
-        destinations=amenity_gdf,
-        max_time=datetime.timedelta(minutes=60),
-        transport_modes=[r5py.TransportMode.TRANSIT, r5py.TransportMode.WALK],
-        departure=datetime.datetime(2025, 10, 20, 10, 0, 0),
-        departure_time_window=datetime.timedelta(minutes=30),
-    )
+    weight_sum = sum(weights.values())
 
-    accessibility = index_function(
-        travel_time_matrix,
-        origin_points_gdf.set_index("id")["population"],
-        amenity_gdf.set_index("id")["weight"],
-        **index_function_kwargs,
-    )
+    weighted_index = pd.Series(0, index=origins.h3_grid["id"])
 
-    return origins.h3_grid.set_index("id").assign(accessibility=accessibility)
+    for amenity, weight in weights.items():
+        weighted_index += amenity_indices[amenity] * weight / weight_sum
+
+    return origins.h3_grid.set_index("id").assign(accessibility=weighted_index)
 
 
-def binary(
-    travel_times: pd.DataFrame,
-    population: pd.Series,
-    amenity_weights: pd.Series,
-    threshold: float,
-) -> pd.Series:
-    return (
-        travel_times.set_index("to_id")
-        .groupby("from_id")["travel_time"]
-        .min()
-        .apply(lambda x: 1 if x is not None and x <= threshold else 0)
-    )
+class BinaryIndex(IndexFunction):
+    """
+    TODO
+    """
 
+    def __init__(self, threshold: float):
+        self.threshold = threshold
 
-def tsfca(
-    travel_times: pd.DataFrame,
-    population: pd.Series,
-    amenity_weights: pd.Series,
-    threshold: float,
-    desired_ratio: float,
-) -> pd.Series:
-
-    def calculate_need_to_population_ratio(travel_times: pd.Series):
-        cells_in_catchment = travel_times[(travel_times <= threshold)].index
-        population_in_catchment = population.loc[cells_in_catchment].sum()
-        return 1 / population_in_catchment
-
-    ratios_2sfca = (
-        travel_times.set_index("from_id")
-        .groupby("to_id")
-        .agg(calculate_need_to_population_ratio)
-        .squeeze()
-        .rename("ratio")
-    )
-
-    def calculate_2sfca(travel_times: pd.Series):
-        dests_in_catchment = travel_times[(travel_times <= threshold)].index
-        ratios_in_catchment = (
-            amenity_weights.loc[dests_in_catchment]
-            * ratios_2sfca.loc[dests_in_catchment]
+    def calculate_index(
+        self,
+        travel_times: pd.DataFrame,
+        population: pd.Series,
+        amenity_weights: pd.Series,
+    ) -> pd.Series:
+        return (
+            travel_times.set_index("to_id")
+            .groupby("from_id")["travel_time"]
+            .min()
+            .apply(lambda x: 1 if x is not None and x <= self.threshold else 0)
         )
-        return ratios_in_catchment.sum()
 
-    return (
-        travel_times.set_index("to_id")
-        .groupby("from_id")
-        .agg(calculate_2sfca)
-        .squeeze()
-        .rename("accessibility")
-        .clip(upper=1 / desired_ratio)
-        * desired_ratio
-    )
+
+class TwoStepFca(IndexFunction):
+    """
+    TODO
+    """
+
+    def __init__(self, threshold: float, desired_ratio: float):
+        self.threshold = threshold
+        self.desired_ratio = desired_ratio
+
+    def calculate_index(
+        self,
+        travel_times: pd.DataFrame,
+        population: pd.Series,
+        amenity_weights: pd.Series,
+    ) -> pd.Series:
+
+        def calculate_need_to_population_ratio(travel_times: pd.Series):
+            cells_in_catchment = travel_times[
+                (travel_times <= self.threshold)
+            ].index
+            population_in_catchment = population.loc[cells_in_catchment].sum()
+            return 1 / population_in_catchment
+
+        ratios_2sfca = (
+            travel_times.set_index("from_id")
+            .groupby("to_id")
+            .agg(calculate_need_to_population_ratio)
+            .squeeze()
+            .rename("ratio")
+        )
+
+        def calculate_2sfca(travel_times: pd.Series):
+            dests_in_catchment = travel_times[
+                (travel_times <= self.threshold)
+            ].index
+            ratios_in_catchment = (
+                amenity_weights.loc[dests_in_catchment]
+                * ratios_2sfca.loc[dests_in_catchment]
+            )
+            return ratios_in_catchment.sum()
+
+        return (
+            travel_times.set_index("to_id")
+            .groupby("from_id")
+            .agg(calculate_2sfca)
+            .squeeze()
+            .rename("accessibility")
+            .clip(upper=1 / self.desired_ratio)
+            * self.desired_ratio
+        )

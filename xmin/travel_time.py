@@ -69,7 +69,7 @@ def calculate_travel_time_matrices(
     snap_to_network: str | bool = False,
     snap_street_mode: r5py.TransportMode | str = r5py.TransportMode.CAR,
     **kwargs,
-) -> dict[Amenity, gpd.GeoDataFrame]:
+) -> dict[Amenity, pd.DataFrame]:
     """
     Calcula los tiempos de viaje desde un conjunto de orígenes hacia varios
     conjuntos de necesidades, utilizando una sola operación de cálculo de TTM
