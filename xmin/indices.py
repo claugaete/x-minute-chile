@@ -5,7 +5,6 @@ from pathlib import Path
 import geopandas as gpd
 import numpy as np
 import pandas as pd
-import pyrosm
 import r5py
 
 import xmin
@@ -50,11 +49,12 @@ def calculate_amenity_index(
     snap_to_network: bool = False,
     **index_function_kwargs,
 ):
+    """
+    TODO
+    """
+    
     # load r5py and pois
-    transport_network = r5py.TransportNetwork(osm_path, [gtfs_path])
-    osm_object = pyrosm.OSM(str(osm_path))
-
-    amenity.get_pois(osm_object)
+    transport_network = r5py.TransportNetwork(osm_path, gtfs_path)
 
     origin_points_gdf = origins.h3_grid.assign(
         geometry=origins.h3_grid.geometry.to_crs(
@@ -62,7 +62,7 @@ def calculate_amenity_index(
         ).centroid.to_crs(4326)
     )
 
-    amenity_gdf = amenity.amenity_gdf
+    amenity_gdf = amenity.amenity_gdf.copy()
     if "weight" not in amenity_gdf.columns:
         amenity_gdf["weight"] = 1
 
@@ -102,7 +102,7 @@ def binary(
         travel_times.set_index("to_id")
         .groupby("from_id")["travel_time"]
         .min()
-        .apply(lambda x: 1 if x is not None and x <= 15 else 0)
+        .apply(lambda x: 1 if x is not None and x <= threshold else 0)
     )
 
 
