@@ -137,7 +137,7 @@ def calculate_travel_time_matrices(
         **kwargs,
     )
     travel_time_matrix["_amenity_id"] = travel_time_matrix.merge(
-        all_amenities, left_on="to_id", right_on="id"
+        all_amenities[["id", "_amenity_id"]], left_on="to_id", right_on="id"
     )["_amenity_id"]
 
     # split matrix by amenities and return
