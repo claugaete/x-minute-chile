@@ -75,24 +75,27 @@ def calculate_travel_time_matrices(
     conjuntos de necesidades, utilizando una sola operación de cálculo de TTM
     (Time Travel Matrix).
 
-    Parameters --- origins : Origins
+    Parameters
+    ---
+    origins : Origins
         Orígenes desde los cuales se desean calcular tiempos de viaje.
     amenities : list[Amenity]
         Conjuntos de necesidades que se desean cubrir.
     gtfs_paths: str | Path | list[str] | list[Path]
         Ruta(s) a el/los archivo(s) GTFS a utilizar para obtener viajes en
-        transporte público. Puede dejarse vacío si no se utilizará transporte
-        público en el cálculo.
+        transporte público. Puede entregarse una lista vacía si no se utilizará
+        transporte público en el cálculo.
     osm_path : str | Path
         Ruta al archivo OSM desde el cual se extraerá la red de transporte
         (para caminata/bicicleta).
     snap_to_network: str or bool, default: False
         Si se desea hacer "snapping" de los orígenes/destinos a la red de
-        transporte. Existen cuatro opciones posibles: - `False` o `"none"`: no
-        hacer "snapping". - `"origins"`: solo hacer "snapping" a los orígenes.
-        - `"amenities"`: solo hacer "snapping" a las necesidades/destinos. -
-        `True` o `"all"`: hacer "snapping" tanto a orígenes como a
-        necesidades/destinos.
+        transporte. Existen cuatro opciones posibles:
+            - `False` o `"none"`: no hacer "snapping".
+            - `"origins"`: solo hacer "snapping" a los orígenes.
+            - `"amenities"`: solo hacer "snapping" a las necesidades/destinos.
+            - `True` o `"all"`: hacer "snapping" tanto a orígenes como a
+              necesidades/destinos.
     snap_street_mode : str or r5py.TransportMode, default: TransportMode.CAR
         Modo de transporte que deben aceptar los caminos disponibles para el
         "snapping". Irrelevante si no se aplica "snapping".
