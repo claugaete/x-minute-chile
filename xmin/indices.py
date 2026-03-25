@@ -178,15 +178,22 @@ class TwoStepFca(IndexFunction):
     ---
     threshold : float
         Tiempo máximo de viaje permitido.
-    desired_ratio : float
+    desired_ratio : float | None
         Razón de personas a necesidades para que el índice entregue un valor
-        del 100%. Si `desired_ratio=3000`, se necesita una necesidad cada 3000
-        personas para obtener una accesibilidad del 100%. Si hay más personas
-        por necesidad, se obtiene un valor menor, mientras que si hay menos, se
-        sigue obteniendo un 100%.
+        del 100%.
+        
+        Por ejemplo, si `desired_ratio=3000`, se necesita una necesidad cada
+        3000 personas para obtener una accesibilidad del 100%. Si hay más
+        personas por necesidad, se obtiene un valor menor, mientras que si hay
+        menos, se sigue obteniendo un 100%.
+        
+        Si `desired_ratio=None`, se utilizará como máximo el mejor resultado
+        obtenido entre los orígenes (que obtendrá el 100%), mientras que el
+        resto de orígenes obtendrá valores proporcionalmente menores según sus
+        resultados.
     """
 
-    def __init__(self, threshold: float, desired_ratio: float):
+    def __init__(self, threshold: float, desired_ratio: float | None):
         self.threshold = threshold
         self.desired_ratio = desired_ratio
 
@@ -226,12 +233,21 @@ class TwoStepFca(IndexFunction):
             )
             return ratios_in_catchment.sum()
 
-        return (
+        unclipped_2sfca = (
             travel_times.set_index("to_id")
             .groupby("from_id")
             .agg(calculate_2sfca)
             .squeeze()
             .rename("accessibility")
-            .clip(upper=1 / self.desired_ratio)
+        )
+
+        self.desired_ratio = (
+            1 / unclipped_2sfca.max()
+            if self.desired_ratio is None
+            else self.desired_ratio
+        )
+
+        return (
+            unclipped_2sfca.clip(upper=1 / self.desired_ratio)
             * self.desired_ratio
         )
