@@ -127,7 +127,6 @@ def calculate_weighted_index(
         weights.pop(amenity, None)
 
     # ponderamos índices para obtener el final
-    # TODO poner cada índice individual en su propia columna
     weight_sum = sum(weights.values())
     index_values_gdf["total"] = 0
 
