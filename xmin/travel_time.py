@@ -85,7 +85,7 @@ def calculate_travel_time_matrices(
         Ruta(s) a el/los archivo(s) GTFS a utilizar para obtener viajes en
         transporte público. Puede entregarse una lista vacía si no se utilizará
         transporte público en el cálculo.
-    osm_path : str | Path
+    osm_path : str or Path
         Ruta al archivo OSM desde el cual se extraerá la red de transporte
         (para caminata/bicicleta).
     snap_to_network: str or bool, default: False
