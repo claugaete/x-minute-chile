@@ -1,4 +1,5 @@
 from collections.abc import Callable
+from functools import lru_cache
 from pathlib import Path
 import warnings
 
@@ -63,13 +64,18 @@ class Amenity:
         return self._amenity_gdf
 
 
+@lru_cache(maxsize=None)
+def _get_osm(osm_path: str) -> pyrosm.OSM:
+    """Cached OSM object loader."""
+    return pyrosm.OSM(osm_path)
+
 def osm_amenity(
     name: str,
     osm_path: str | Path,
     osm_filter: dict,
     use_area_as_weight: bool = False,
     area_to_weight_function: Callable[[float], float] = lambda x: x,
-):
+) -> Amenity:
     """
     Crea una `Amenity` con puntos generados programáticamente a partir de un
     filtro de POIs de OSM.
@@ -97,7 +103,7 @@ def osm_amenity(
         podrían no afectar al resultado final).
     """
 
-    osm = pyrosm.OSM(str(osm_path))
+    osm = _get_osm(str(osm_path))
     amenity_gdf: gpd.GeoDataFrame = osm.get_pois(osm_filter)
     if use_area_as_weight:
         amenity_gdf["weight"] = amenity_gdf.to_crs(
