@@ -1,28 +1,96 @@
 from copy import copy
+import os
 from pathlib import Path
+import tempfile
 
 import pandas as pd
 import partridge as ptg
+from shapely.geometry import MultiPolygon, Polygon
+
+
+def shapely_to_osmosis_polygon(
+    poly: Polygon | MultiPolygon, name: str = "polygon"
+) -> str:
+    """
+    Función auxiliar para convertir un polígono/multipolígono de Shapely en un
+    polígono en formato "Osmosis polygon filter file format" para filtrar
+    archivos .osm.pbf.
+
+    Parameters
+    ---
+    poly : Polygon or MultiPolygon
+        Polígono a convertir.
+    name : str, default: "polygon"
+        Nombre del polígono convertido.
+
+    Returns
+    ---
+    Texto correspondiente al polígono en formato "Osmosis polygon filter file
+    format".
+    """
+    lines = [name]
+    if isinstance(poly, Polygon):
+        poly = MultiPolygon([poly])
+    for i, subpoly in enumerate(poly.geoms):
+
+        # exterior coords
+        lines.append(str(i))
+        for x, y in subpoly.exterior.coords:
+            lines.append(f"    {x:.7f} {y:.7f}")
+        lines.append("END")
+
+        # interior coords (holes)
+        for j, interior in enumerate(subpoly.interiors):
+            lines.append(f"{i}-{j}")
+            for x, y in interior.coords:
+                lines.append(f"    {x:.7f} {y:.7f}")
+            lines.append("END")
+    lines.append("END")
+    return "\n".join(lines)
+
+
+def extract_osm_subset(
+    inpath: str | Path, outpath: str | Path, bounds: Polygon | MultiPolygon
+):
+    """
+    Extrae una porción de un archivo PBF utilizando osmconvert. Requiere que
+    osmconvert esté instalado en el sistema.
+
+    Parameters
+    ---
+    inpath : str or Path
+        Ruta al archivo PBF de entrada.
+    outpath : str or Path
+        Ruta al archivo PBF de salida.
+    bounds : Polygon or MultiPolygon
+        Polígono con la porción a extraer.
+    """
+
+    # write bounds to temporary .poly file and use osmconvert
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".poly") as tmp:
+        tmp.write(shapely_to_osmosis_polygon(bounds))
+        tmp.flush()
+        os.system(f"osmconvert {inpath} -B={tmp.name} -o={outpath}")
 
 
 def seconds_to_gtfs_time(total_seconds: float) -> str:
     """
     Convierte un tiempo en segundos a un formato utilizable por GTFS, del
     estilo HH:MM:SS.
-    
+
     Código de Danny Whalen, extraído de:
     https://gist.github.com/invisiblefunnel/6c9f3a9b537d3f0ad192c24777b6ae57
-    
+
     Parameters
     ---
     total_seconds : float
         Número a convertir.
-    
+
     Returns
     ---
     String con el tiempo formateado.
     """
-    
+
     minutes, seconds = divmod(total_seconds, 60)
     hours, minutes = divmod(minutes, 60)
     time = list(
@@ -41,10 +109,10 @@ def clean_gtfs(inpath: str | Path, outpath: str | Path):
     Esto hace el archivo más pesado, pero mucho más eficiente a la hora de
     computar matrices de tiempo de viaje mediante r5py. También se elimina
     `shapes.txt` al no utilizarse.
-    
+
     Código de Danny Whalen, extraído de:
     https://gist.github.com/invisiblefunnel/6c9f3a9b537d3f0ad192c24777b6ae57
-    
+
     Parameters
     ---
     inpath : str or Path
@@ -108,7 +176,7 @@ def clean_gtfs(inpath: str | Path, outpath: str | Path):
     new_feed = ptg.load_raw_feed(inpath)
     new_feed.set("trips.txt", trips_df)
     new_feed.set("stop_times.txt", stop_times_df)
-    
+
     # remove unneeded files
     new_feed.set("frequencies.txt", ptg.utilities.empty_df())
     new_feed.set("shapes.txt", ptg.utilities.empty_df())
