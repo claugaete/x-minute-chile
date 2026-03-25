@@ -29,10 +29,10 @@ class Amenity:
     def __repr__(self):
         return f"Amenity(name={self._name})"
 
-    def __init__(self, name: str, amenity_gdf: gpd.GeoDataFrame | None):
+    def __init__(self, name: str, amenity_gdf: gpd.GeoDataFrame):
         
         self._name = name
-        self._amenity_gdf = amenity_gdf
+        self._amenity_gdf = amenity_gdf.to_crs(4326)
 
         if not (
             "id" in self._amenity_gdf.columns
