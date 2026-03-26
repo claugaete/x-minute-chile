@@ -61,101 +61,135 @@ def try_snap_to_network(
     )
 
 
-def calculate_travel_time_matrices(
-    origins: Origins,
-    amenities: list[Amenity],
-    gtfs_paths: str | Path | list[str] | list[Path],
-    osm_path: str | Path,
-    snap_to_network: str | bool = False,
-    snap_street_mode: r5py.TransportMode | str = r5py.TransportMode.CAR,
-    **kwargs,
-) -> dict[Amenity, pd.DataFrame]:
+class TravelTimeMatrices:
     """
-    Calcula los tiempos de viaje desde un conjunto de orígenes hacia varios
+    Guarda los tiempos de viaje desde un conjunto de orígenes hacia varios
     conjuntos de necesidades, utilizando una sola operación de cálculo de TTM
-    (Time Travel Matrix).
+    (Travel Time Matrix).
 
     Parameters
     ---
-    origins : Origins
-        Orígenes desde los cuales se desean calcular tiempos de viaje.
-    amenities : list[Amenity]
-        Conjuntos de necesidades que se desean cubrir.
-    gtfs_paths: str | Path | list[str] | list[Path]
-        Ruta(s) a el/los archivo(s) GTFS a utilizar para obtener viajes en
-        transporte público. Puede entregarse una lista vacía si no se utilizará
-        transporte público en el cálculo.
-    osm_path : str or Path
-        Ruta al archivo OSM desde el cual se extraerá la red de transporte
-        (para caminata/bicicleta).
-    snap_to_network: str or bool, default: False
-        Si se desea hacer "snapping" de los orígenes/destinos a la red de
-        transporte. Existen cuatro opciones posibles:
-            - `False` o `"none"`: no hacer "snapping".
-            - `"origins"`: solo hacer "snapping" a los orígenes.
-            - `"amenities"`: solo hacer "snapping" a las necesidades/destinos.
-            - `True` o `"all"`: hacer "snapping" tanto a orígenes como a
-              necesidades/destinos.
-    snap_street_mode : str or r5py.TransportMode, default: TransportMode.CAR
-        Modo de transporte que deben aceptar los caminos disponibles para el
-        "snapping". Irrelevante si no se aplica "snapping".
-    **kwargs
-        Argumentos que serán pasados al cálculo de la TTM. Puede ser cualquier
-        argumento que se pueda pasar a `r5py.RegionalTask`.
-
-    Returns
-    ---
-    Un diccionario cuyas llaves son las distintas `Amenities`, y los valores
-    son las matrices de tiempo de viaje desde cada origen (columna `from_id`) a
-    cada destino que posee la `Amenity` (columna `to_id`). El tiempo de viaje
-    `travel_time` es un valor entero representando el tiempo de viaje en
-    minutos, y es `None` si el tiempo de viaje es mayor al tiempo máximo
-    permitido.
+    origins: Origins
+        Orígenes desde los cuales se calcularon los tiempos de viaje.
+    matrices: dict[Amenity, DataFrame]
+        Un diccionario cuyas llaves son las distintas `Amenities`, y los
+        valores son las matrices de tiempo de viaje desde cada origen (columna
+        `from_id`) a cada destino que posee la `Amenity` (columna `to_id`). El
+        tiempo de viaje `travel_time` es un valor entero representando el
+        tiempo de viaje en minutos, y es `None` si el tiempo de viaje es mayor
+        al tiempo máximo permitido.
     """
 
-    # load r5py and pois
-    transport_network = r5py.TransportNetwork(osm_path, gtfs_paths)
+    def __init__(
+        self, origins: Origins, matrices: dict[Amenity, pd.DataFrame]
+    ):
 
-    # convert origins from areas to points
-    origin_points_gdf = origins.h3_grid.copy()
-    xmin._convert_geometries_to_centroids(origin_points_gdf)
+        self._origins = origins
+        self._matrices = matrices
 
-    # assign each amenity to its category and concatenate
-    all_amenities = pd.concat(
-        [
-            amenity.amenity_gdf.assign(_amenity_id=id(amenity))
-            for amenity in amenities
-        ]
-    )
-
-    # snap to network if necessary
-    if snap_to_network in ("origins", "all", True):
-        origin_points_gdf = try_snap_to_network(
-            transport_network,
-            snap_street_mode,
-            origin_points_gdf,
-            origins.h3_grid,
-        )
-    if snap_to_network in ("amenities", "all", True):
-        all_amenities = try_snap_to_network(
-            transport_network, snap_street_mode, all_amenities
-        )
-
-    # calculate matrix
-    travel_time_matrix = r5py.TravelTimeMatrix(
-        transport_network,
-        origins=origin_points_gdf,
-        destinations=all_amenities,
+    @classmethod
+    def compute(
+        cls,
+        origins: Origins,
+        amenities: list[Amenity],
+        gtfs_paths: str | Path | list[str] | list[Path],
+        osm_path: str | Path,
+        snap_to_network: str | bool = False,
+        snap_street_mode: r5py.TransportMode | str = r5py.TransportMode.CAR,
         **kwargs,
-    )
-    travel_time_matrix["_amenity_id"] = travel_time_matrix.merge(
-        all_amenities[["id", "_amenity_id"]], left_on="to_id", right_on="id"
-    )["_amenity_id"]
+    ) -> "TravelTimeMatrices":
+        """
+        Calcula los tiempos de viaje y retorna una instancia de
+        TravelTimeMatrices.
 
-    # split matrix by amenities and return
-    return {
-        amenity: travel_time_matrix[
-            travel_time_matrix["_amenity_id"] == id(amenity)
-        ].drop(columns="_amenity_id")
-        for amenity in amenities
-    }
+        Parameters
+        ---
+        origins : Origins
+            Orígenes desde los cuales se desean calcular tiempos de viaje.
+        amenities : list[Amenity]
+            Conjuntos de necesidades que se desean cubrir.
+        gtfs_paths: str | Path | list[str] | list[Path]
+            Ruta(s) a el/los archivo(s) GTFS a utilizar para obtener viajes en
+            transporte público. Puede entregarse una lista vacía si no se
+            utilizará transporte público en el cálculo.
+        osm_path : str or Path
+            Ruta al archivo OSM desde el cual se extraerá la red de transporte
+            (para caminata/bicicleta).
+        snap_to_network: str or bool, default: False
+            Si se desea hacer "snapping" de los orígenes/destinos a la red de
+            transporte. Existen cuatro opciones posibles:
+                - `False` o `"none"`: no hacer "snapping".
+                - `"origins"`: solo hacer "snapping" a los orígenes.
+                - `"amenities"`: solo hacer "snapping" a las
+                  necesidades/destinos.
+                - `True` o `"all"`: hacer "snapping" tanto a orígenes como a
+                necesidades/destinos.
+        snap_street_mode : str or r5py.TransportMode, default:
+        TransportMode.CAR
+            Modo de transporte que deben aceptar los caminos disponibles para
+            el "snapping". Irrelevante si no se aplica "snapping".
+        **kwargs
+            Argumentos que serán pasados al cálculo de la TTM. Puede ser
+            cualquier argumento que se pueda pasar a `r5py.RegionalTask`.
+        """
+
+        # load r5py and pois
+        transport_network = r5py.TransportNetwork(osm_path, gtfs_paths)
+
+        # convert origins from areas to points
+        origin_points_gdf = origins.h3_grid.copy()
+        xmin._convert_geometries_to_centroids(origin_points_gdf)
+
+        # assign each amenity to its category and concatenate
+        all_amenities = pd.concat(
+            [
+                amenity.amenity_gdf.assign(_amenity_id=id(amenity))
+                for amenity in amenities
+            ]
+        )
+
+        # snap to network if necessary
+        if snap_to_network in ("origins", "all", True):
+            origin_points_gdf = try_snap_to_network(
+                transport_network,
+                snap_street_mode,
+                origin_points_gdf,
+                origins.h3_grid,
+            )
+        if snap_to_network in ("amenities", "all", True):
+            all_amenities = try_snap_to_network(
+                transport_network, snap_street_mode, all_amenities
+            )
+
+        # calculate matrix
+        travel_time_matrix = r5py.TravelTimeMatrix(
+            transport_network,
+            origins=origin_points_gdf,
+            destinations=all_amenities,
+            **kwargs,
+        )
+        travel_time_matrix["_amenity_id"] = travel_time_matrix.merge(
+            all_amenities[["id", "_amenity_id"]],
+            left_on="to_id",
+            right_on="id",
+        )["_amenity_id"]
+
+        # split matrix by amenities
+        matrices = {
+            amenity: travel_time_matrix[
+                travel_time_matrix["_amenity_id"] == id(amenity)
+            ].drop(columns="_amenity_id")
+            for amenity in amenities
+        }
+
+        return cls(origins, matrices)
+
+    @property
+    def origins(self) -> Origins:
+        """Orígenes desde los cuales se calcularon los tiempos de viaje."""
+        return self._origins
+
+    @property
+    def matrices(self) -> dict[Amenity, pd.DataFrame]:
+        """Matrices de tiempo de viaje para cada necesidad"""
+        return self._matrices
