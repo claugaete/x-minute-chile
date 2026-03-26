@@ -13,7 +13,7 @@ class Amenity:
     """
     Clase que guarda puntos geográficos que satisfacen una necesidad
     específica.
-    
+
     Parameters
     ---
     name : str
@@ -31,7 +31,7 @@ class Amenity:
         return f"Amenity(name={self._name})"
 
     def __init__(self, name: str, amenity_gdf: gpd.GeoDataFrame):
-        
+
         self._name = name
         self._amenity_gdf = amenity_gdf.to_crs(4326)
 
@@ -52,7 +52,7 @@ class Amenity:
             )
             # if not, convert to centroids
             xmin._convert_geometries_to_centroids(self._amenity_gdf)
-            
+
     @property
     def name(self) -> str:
         """Nombre de la necesidad."""
@@ -68,6 +68,7 @@ class Amenity:
 def _get_osm(osm_path: str) -> pyrosm.OSM:
     """Cached OSM object loader."""
     return pyrosm.OSM(osm_path)
+
 
 def osm_amenity(
     name: str,
@@ -101,6 +102,10 @@ def osm_amenity(
         considerar este caso borde a la hora de convertir áreas a pesos (si
         se utiliza la función identidad, estos puntos tendrían peso 0 y
         podrían no afectar al resultado final).
+
+    Returns
+    ---
+    Un objeto `Amenity` correspondiente a la necesidad.
     """
 
     osm = _get_osm(str(osm_path))

@@ -63,6 +63,12 @@ def calculate_weighted_index(
         calcula ponderando los índices de las distintas necesidades utilizando
         estos pesos. Si no se entregan pesos, todos los índices tendrán el
         mismo peso.
+
+    Returns
+    ---
+    Un GeoDataFrame con las geometrías de `origins`, donde cada columna
+    corresponde al índice calculado para una de las necesidades, y se agrega
+    una columna `"total"` con el índice ponderado.
     """
 
     if "population" not in origins.h3_grid.columns:
@@ -180,12 +186,12 @@ class TwoStepFca(IndexFunction):
     desired_ratio : float | None
         Razón de personas a necesidades para que el índice entregue un valor
         del 100%.
-        
+
         Por ejemplo, si `desired_ratio=3000`, se necesita una necesidad cada
         3000 personas para obtener una accesibilidad del 100%. Si hay más
         personas por necesidad, se obtiene un valor menor, mientras que si hay
         menos, se sigue obteniendo un 100%.
-        
+
         Si `desired_ratio=None`, se utilizará como máximo el mejor resultado
         obtenido entre los orígenes (que obtendrá el 100%), mientras que el
         resto de orígenes obtendrá valores proporcionalmente menores según sus

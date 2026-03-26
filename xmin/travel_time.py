@@ -102,6 +102,15 @@ def calculate_travel_time_matrices(
     **kwargs
         Argumentos que serán pasados al cálculo de la TTM. Puede ser cualquier
         argumento que se pueda pasar a `r5py.RegionalTask`.
+
+    Returns
+    ---
+    Un diccionario cuyas llaves son las distintas `Amenities`, y los valores
+    son las matrices de tiempo de viaje desde cada origen (columna `from_id`) a
+    cada destino que posee la `Amenity` (columna `to_id`). El tiempo de viaje
+    `travel_time` es un valor entero representando el tiempo de viaje en
+    minutos, y es `None` si el tiempo de viaje es mayor al tiempo máximo
+    permitido.
     """
 
     # load r5py and pois
