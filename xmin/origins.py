@@ -11,30 +11,31 @@ class Origins:
 
     Parameters
     ---
-    bounds : GeoDataFrame
-        GeoDataFrame con los límites de las regiones para las cuales se
-        calcularán índices de accesibilidad
-    h3_level : int, default: 8
-        Nivel de H3 que se utilizará para dividir las celdas. Más
+    regions : GeoDataFrame
+        GeoDataFrame con las regiones para las cuales se calcularán índices de
+        accesibilidad.
+    h3_resolution : int
+        Resolución de H3 que se utilizará para dividir las celdas. Más
         información en https://h3geo.org/docs/core-library/restable/
     population_gdf : GeoDataFrame or None, default: None
         GeoDataFrame con datos de población. Debe tener por lo menos las
-        columnas `population` y `geometry`. No es necesario que cubra el
-        mismo área que `bounds`. Si no se recibe un GeoDataFrame, no se
-        cargarán datos de población en los orígenes y no se permitirá el
-        uso de índices que necesiten esa información.
+        columnas `population` y `geometry`. No es necesario que cubra el mismo
+        área que `bounds`. Si no se recibe un GeoDataFrame, no se cargarán
+        datos de población en los orígenes y los índices que utilicen esa
+        información asumirán la misma población en cada celda.
     """
 
     def __init__(
         self,
-        bounds: gpd.GeoDataFrame,
-        h3_level: int = 8,
+        regions: gpd.GeoDataFrame,
+        h3_resolution: int,
         population_gdf: gpd.GeoDataFrame | None = None,
     ):
 
-        self._bounds = bounds
+        self._regions = regions
+        self._h3_resolution = h3_resolution
 
-        self._h3_grid = h3fy(bounds, resolution=h3_level)
+        self._h3_grid = h3fy(regions, resolution=h3_resolution)
         if population_gdf is not None:
             if not (
                 "population" in population_gdf.columns
@@ -47,15 +48,13 @@ class Origins:
             self._overlay_population_h3(population_gdf)
         self._h3_grid = self._h3_grid.rename_axis("id").reset_index()
 
-    def _overlay_population_h3(
-        self, population_gdf: gpd.GeoDataFrame
-    ) -> gpd.GeoDataFrame:
+    def _overlay_population_h3(self, population_gdf: gpd.GeoDataFrame):
         """
         Intersecta la población de una ciudad (normalmente dividida en sus
         manzanas) con su grilla H3, dividiendo aquellas zonas que caen en
         múltiples celdas de H3, y repartiendo la población propocional al área
-        de la zona que cae en cada celda. Retorna la grilla de H3 con
-        poblaciones asignadas.
+        de la zona que cae en cada celda. Modifica la grilla de H3, agregándole
+        la columna `population`.
         """
 
         # add column with area of each zone
@@ -85,11 +84,16 @@ class Origins:
         self._h3_grid["population"] = h3_population.fillna(0)
 
     @property
-    def bounds(self) -> gpd.GeoDataFrame:
+    def regions(self) -> gpd.GeoDataFrame:
         """GeoDataFrame con los límites de las regiones."""
-        return self._bounds
+        return self._regions
 
     @property
     def h3_grid(self) -> gpd.GeoDataFrame:
         """GeoDataFrame con las celdas hexagonales de las regiones."""
         return self._h3_grid
+
+    @property
+    def h3_resolution(self) -> gpd.GeoDataFrame:
+        """Nivel de resolución de la grilla de celdas hexagonales."""
+        return self._h3_resolution
