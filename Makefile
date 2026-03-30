@@ -3,7 +3,7 @@
 #################################################################################
 
 PROJECT_NAME = x-minute-chile
-PYTHON_VERSION = 3.11
+PYTHON_VERSION = 3.12
 PYTHON_INTERPRETER = python
 
 #################################################################################
@@ -14,8 +14,7 @@ PYTHON_INTERPRETER = python
 ## Install Python dependencies
 .PHONY: requirements
 requirements:
-	$(PYTHON_INTERPRETER) -m pip install -U pip
-	$(PYTHON_INTERPRETER) -m pip install -r requirements.txt
+	uv sync
 	
 
 
@@ -41,15 +40,19 @@ format:
 
 
 
+## Run tests
+.PHONY: test
+test:
+	python -m pytest tests
 
 
 ## Set up Python interpreter environment
 .PHONY: create_environment
 create_environment:
-	
-	conda create --name $(PROJECT_NAME) python=$(PYTHON_VERSION) -y
-	
-	@echo ">>> conda env created. Activate with:\nconda activate $(PROJECT_NAME)"
+	uv venv --python $(PYTHON_VERSION)
+	@echo ">>> New uv virtual environment created. Activate with:"
+	@echo ">>> Windows: .\\\\.venv\\\\Scripts\\\\activate"
+	@echo ">>> Unix/macOS: source ./.venv/bin/activate"
 	
 
 

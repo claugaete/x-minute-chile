@@ -4,7 +4,7 @@
     <img src="https://img.shields.io/badge/CCDS-Project%20template-328F97?logo=cookiecutter" />
 </a>
 
-Cálculo de índices de accesibilidad urbana
+Cálculo de índices de accesibilidad urbana en el contexto chileno
 
 ## Project Organization
 
