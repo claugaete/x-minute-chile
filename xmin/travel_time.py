@@ -191,5 +191,5 @@ class TravelTimeMatrices:
 
     @property
     def matrices(self) -> dict[Amenity, pd.DataFrame]:
-        """Matrices de tiempo de viaje para cada necesidad"""
+        """Matrices de tiempo de viaje para cada necesidad."""
         return self._matrices
