@@ -1,10 +1,9 @@
 from collections.abc import Callable
-from functools import lru_cache
 from pathlib import Path
 import warnings
 
 import geopandas as gpd
-import pyrosm
+import quackosm as qosm
 
 import xmin
 
@@ -43,6 +42,17 @@ class Amenity:
                 "`amenity_gdf` debe tener al menos las columnas `id` y "
                 "`geometry`"
             )
+        
+        if not self._amenity_gdf["id"].is_unique:
+            raise ValueError(
+                "IDs deben ser únicas en `amenity_gdf`"
+            )
+
+        # add amenity name to each id (in case a destination from a different
+        # amenity shares the same id)
+        self._amenity_gdf["id"] = (
+            self._name + "/" + self._amenity_gdf["id"].astype(str)
+        )
 
         # make sure all geometries are point geometries
         if not (self._amenity_gdf.geom_type == "Point").all():
@@ -62,12 +72,6 @@ class Amenity:
     def amenity_gdf(self) -> gpd.GeoDataFrame:
         """GeoDataFrame con los puntos que satisfacen la necesidad."""
         return self._amenity_gdf
-
-
-@lru_cache(maxsize=None)
-def _get_osm(osm_path: str) -> pyrosm.OSM:
-    """Cached OSM object loader."""
-    return pyrosm.OSM(osm_path)
 
 
 def osm_amenity(
@@ -108,8 +112,15 @@ def osm_amenity(
     Un objeto `Amenity` correspondiente a la necesidad.
     """
 
-    osm = _get_osm(str(osm_path))
-    amenity_gdf: gpd.GeoDataFrame = osm.get_pois(osm_filter)
+    amenity_gdf: gpd.GeoDataFrame = (
+        qosm.convert_pbf_to_geodataframe(
+            osm_path,
+            tags_filter=osm_filter,
+            working_directory=xmin.quackosm_working_directory
+        )
+        .rename_axis("id")
+        .reset_index()
+    )
     if use_area_as_weight:
         amenity_gdf["weight"] = amenity_gdf.to_crs(
             xmin.projected_crs

@@ -1,4 +1,6 @@
+from collections import Counter
 from pathlib import Path
+import warnings
 
 import geopandas as gpd
 import numpy as np
@@ -8,6 +10,34 @@ import r5py
 import xmin
 from xmin.amenities import Amenity
 from xmin.origins import Origins
+
+
+def _check_duplicate_amenities(amenities: list[Amenity]):
+    """
+    Función helper para revisar si un conjunto de Amenities tiene nombres
+    duplicados.
+    
+    Parameters
+    ---
+    amenities : list[Amenity]
+        Lista de necesidades a revisar.
+        
+    Returns
+    ---
+    None; genera un warning si encuentra duplicados.
+    """
+
+    counts = Counter([amenity.name for amenity in amenities])
+    duplicates = [item for item, count in counts.items() if count > 1]
+    if duplicates:
+        warnings.warn(
+            "Los siguientes nombres de Amenities están duplicados: "
+            + ", ".join(duplicates)
+            + ". Ambas necesidades serán consideradas como una sola, lo "
+            "cual podría generar resultados inesperados; se recomienda "
+            "cambiar los nombres de las necesidades para que sean "
+            "distintos."
+        )
 
 
 def try_snap_to_network(
@@ -133,6 +163,8 @@ class TravelTimeMatrices:
             cualquier argumento que se pueda pasar a `r5py.RegionalTask`.
         """
 
+        _check_duplicate_amenities(amenities)
+
         # load r5py and pois
         transport_network = r5py.TransportNetwork(osm_path, gtfs_paths)
 
@@ -143,7 +175,7 @@ class TravelTimeMatrices:
         # assign each amenity to its category and concatenate
         all_amenities = pd.concat(
             [
-                amenity.amenity_gdf.assign(_amenity_id=id(amenity))
+                amenity.amenity_gdf.assign(_amenity_id=amenity.name)
                 for amenity in amenities
             ]
         )
@@ -177,7 +209,7 @@ class TravelTimeMatrices:
         # split matrix by amenities
         matrices = {
             amenity: travel_time_matrix[
-                travel_time_matrix["_amenity_id"] == id(amenity)
+                travel_time_matrix["_amenity_id"] == amenity.name
             ].drop(columns="_amenity_id")
             for amenity in amenities
         }
