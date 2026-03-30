@@ -1,6 +1,6 @@
 from copy import copy
-import os
 from pathlib import Path
+import subprocess
 import tempfile
 
 import pandas as pd
@@ -70,7 +70,12 @@ def extract_osm_subset(
     with tempfile.NamedTemporaryFile(mode="w", suffix=".poly") as tmp:
         tmp.write(shapely_to_osmosis_polygon(bounds))
         tmp.flush()
-        os.system(f"osmconvert {inpath} -B={tmp.name} -o={outpath}")
+        subprocess.run(
+            ["osmconvert", inpath, f"-B={tmp.name}", f"-o={outpath}"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
 
 
 def seconds_to_gtfs_time(total_seconds: float) -> str:
