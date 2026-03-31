@@ -4,6 +4,7 @@ import warnings
 
 import geopandas as gpd
 import quackosm as qosm
+from shapely.geometry.base import BaseGeometry
 
 import xmin
 
@@ -24,15 +25,27 @@ class Amenity:
         sobre otro. Si alguna geometría de la columna `geometry` no es del
         tipo `Point`, se lanzará una advertencia y se convertirá a `Point`
         usando su centroide.
+    bounds : BaseGeometry or None, default: None
+        Si se especifica, se filtrará `amenity_gdf` para que solo contenga las
+        filas que intersectan con el polígono dado.
     """
 
     def __repr__(self):
         return f"Amenity(name={self._name})"
 
-    def __init__(self, name: str, amenity_gdf: gpd.GeoDataFrame):
+    def __init__(
+        self,
+        name: str,
+        amenity_gdf: gpd.GeoDataFrame,
+        bounds: BaseGeometry | None = None,
+    ):
 
         self._name = name
         self._amenity_gdf = amenity_gdf.to_crs(4326)
+        if bounds:
+            self._amenity_gdf = self._amenity_gdf[
+                self._amenity_gdf.intersects(bounds)
+            ]
 
         if not (
             "id" in self._amenity_gdf.columns
@@ -42,11 +55,9 @@ class Amenity:
                 "`amenity_gdf` debe tener al menos las columnas `id` y "
                 "`geometry`"
             )
-        
+
         if not self._amenity_gdf["id"].is_unique:
-            raise ValueError(
-                "IDs deben ser únicas en `amenity_gdf`"
-            )
+            raise ValueError("IDs deben ser únicas en `amenity_gdf`")
 
         # add amenity name to each id (in case a destination from a different
         # amenity shares the same id)
@@ -78,6 +89,7 @@ def osm_amenity(
     name: str,
     osm_path: str | Path,
     osm_filter: dict,
+    bounds: BaseGeometry | None = None,
     use_area_as_weight: bool = False,
     area_to_weight_function: Callable[[float], float] = lambda x: x,
 ) -> Amenity:
@@ -90,12 +102,15 @@ def osm_amenity(
     name : str
         Nombre de la necesidad
     osm_path : Path or str
-        Ruta al archivo de OSM del cual extraer los POIs.
+        Ruta al archivo PBF de OSM del cual extraer los POIs.
     osm_filter : dict
         Diccionario con el filtro que se va a pasar a OSM para obtener las
         categorías correspondientes a la necesidad. Por ejemplo, para
         centros de salud, se podría utilizar el filtro `{"amenity":
         ["hospital", "clinic"]}`.
+    bounds : BaseGeometry or None, default: None
+        Polígono dentro del cual se desean buscar los POIs en OSM. Si no se
+        especifica, se buscarán puntos en toda la geometría del archivo PBF.
     use_area_as_weight : bool, default: False
         Booleano indicando si se utiliza el área de los POIs obtenidos en
         OSM como referencia para obtener el peso de cada uno.
@@ -116,7 +131,8 @@ def osm_amenity(
         qosm.convert_pbf_to_geodataframe(
             osm_path,
             tags_filter=osm_filter,
-            working_directory=xmin.quackosm_working_directory
+            working_directory=xmin.quackosm_working_directory,
+            geometry_filter=bounds,
         )
         .rename_axis("id")
         .reset_index()
