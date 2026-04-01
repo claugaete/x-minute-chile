@@ -6,6 +6,7 @@ import pandas as pd
 from shapely.geometry.base import BaseGeometry
 
 from xmin.amenities import Amenity
+from xmin.geometry import to_centroids
 from xmin.origins import Origins
 
 
@@ -112,10 +113,7 @@ class AccessibilityRatings:
             tendrán el mismo peso.
         """
 
-        if "population" not in origins.h3_grid.columns:
-            population = pd.Series(1, index=origins.h3_grid["id"])
-        else:
-            population = origins.h3_grid.set_index("id")["population"]
+        population = origins.h3_grid.set_index("id")["population"]
 
         amenity_index_values: dict[Amenity, pd.Series] = {}
         ratings_gdf = origins.h3_grid.set_index("id")
@@ -123,8 +121,6 @@ class AccessibilityRatings:
         # calcular el índice particular de cada necesidad
         for amenity, ttm in time_travel_matrices.items():
             amenity_gdf = amenity.amenity_gdf.set_index("id")
-            if "weight" not in amenity_gdf.columns:
-                amenity_gdf["weight"] = 1
             current_index = (
                 index_function.get(amenity)
                 if isinstance(index_function, dict)
@@ -242,6 +238,73 @@ class AccessibilityRatings:
         new_ratings = self.gdf.reindex(new_grid_indexed.index)
 
         return AccessibilityRatings(new_origins, self.weights, new_ratings)
+
+    def aggregate(
+        self,
+        new_resolution: int,
+    ) -> "AccessibilityRatings":
+        """
+        Agrega los valores de accesibilidad calculados para una resolución
+        menor de H3; esto reduce la dependencia a los orígenes escogidos para
+        calcular la accesibilidad en cada celda.
+
+        Nota: Las celdas de un nivel no están completamente contenidas en una
+        única celda de resolución inferior; para efectos de esta función, la
+        accesibilidad promedio de una celda considera todas las subceldas cuyo
+        **centroide** cae en la celda. De forma análoga, la población asignada
+        a cada celda es la suma de las poblaciones de las subceldas cuyos
+        centroides caen en la celda. Esta población podría diferir levemente de
+        la población obtenida al crear un nuevo objeto Origins con la
+        resolución nueva y usando el `population_gdf` original. Para más
+        información respecto a esta discrepancia, ver
+        https://observablehq.com/@nrabinowitz/h3-hierarchical-non-containment.
+
+        Parameters
+        ---
+        new_resolution : int
+            La nueva resolución de H3; no puede ser mayor a la resolución
+            actual.
+
+        Returns
+        ---
+        Un nuevo objeto AccessibilityRatings con la resolución reducida.
+        """
+
+        if new_resolution > self.origins.h3_resolution:
+            raise ValueError(
+                f"Nueva resolución ({new_resolution}) no puede ser mayor a la "
+                f"resolución actual ({self.origins.h3_resolution})."
+            )
+
+        new_origins = Origins(
+            self.origins.regions,
+            new_resolution,
+            population_gdf=to_centroids(self.origins.h3_grid),
+        )
+
+        # each old cell gets assigned to the new cell where its centroid falls,
+        # and we average the accessibility values
+        cell_asignment = (
+            to_centroids(self.gdf)
+            .sjoin(
+                new_origins.h3_grid,
+                how="right",
+                predicate="within",
+                lsuffix="left",
+                rsuffix=None,
+            )
+            .drop(columns={"id_left", "population_left"})
+            .groupby(["id", "geometry", "population"])
+            .mean()
+            .reset_index()
+            .set_index("id")
+        )
+
+        new_gdf = gpd.GeoDataFrame(
+            cell_asignment, geometry="geometry", crs=self.gdf.crs
+        )
+
+        return AccessibilityRatings(new_origins, self.weights, new_gdf)
 
 
 def calculate_weighted_index(

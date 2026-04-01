@@ -7,6 +7,7 @@ import quackosm as qosm
 from shapely.geometry.base import BaseGeometry
 
 import xmin
+from xmin.geometry import to_centroids
 
 
 class Amenity:
@@ -19,12 +20,13 @@ class Amenity:
     name : str
         Nombre de la necesidad.
     amenity_gdf : GeoDataFrame
-        GeoDataFrame con los puntos que satisfacen la necesidad. Requiere
-        al menos una columna `id` y una columna `geometry`; opcionalmente
-        puede tener una columna `weight` si se desea ponderar un punto por
-        sobre otro. Si alguna geometría de la columna `geometry` no es del
-        tipo `Point`, se lanzará una advertencia y se convertirá a `Point`
-        usando su centroide.
+        GeoDataFrame con los puntos que satisfacen la necesidad. Requiere al
+        menos una columna `id` y una columna `geometry`; opcionalmente puede
+        tener una columna `weight` si se desea ponderar un punto por sobre otro
+        (si no existe esta columna, se asumirá un peso 1 para todos los
+        puntos). Si alguna geometría de la columna `geometry` no es del tipo
+        `Point`, se lanzará una advertencia y se convertirá a `Point` usando su
+        centroide.
     bounds : BaseGeometry or None, default: None
         Si se especifica, se filtrará `amenity_gdf` para que solo contenga las
         filas que intersectan con el polígono dado.
@@ -42,10 +44,6 @@ class Amenity:
 
         self._name = name
         self._amenity_gdf = amenity_gdf.to_crs(4326)
-        if bounds:
-            self._amenity_gdf = self._amenity_gdf[
-                self._amenity_gdf.intersects(bounds)
-            ]
 
         if not (
             "id" in self._amenity_gdf.columns
@@ -58,6 +56,14 @@ class Amenity:
 
         if not self._amenity_gdf["id"].is_unique:
             raise ValueError("IDs deben ser únicas en `amenity_gdf`")
+        
+        if bounds:
+            self._amenity_gdf = self._amenity_gdf[
+                self._amenity_gdf.intersects(bounds)
+            ]
+            
+        if "weight" not in self._amenity_gdf.columns:
+            self._amenity_gdf["weight"] = 1
 
         # add amenity name to each id (in case a destination from a different
         # amenity shares the same id)
@@ -72,7 +78,7 @@ class Amenity:
                 "serán convertidas a puntos mediante sus centroides."
             )
             # if not, convert to centroids
-            xmin._convert_geometries_to_centroids(self._amenity_gdf)
+            self._amenity_gdf = to_centroids(self._amenity_gdf)
 
     @property
     def name(self) -> str:
@@ -142,6 +148,4 @@ def osm_amenity(
             xmin.projected_crs
         ).area.apply(area_to_weight_function)
 
-    xmin._convert_geometries_to_centroids(amenity_gdf)
-
-    return Amenity(name, amenity_gdf)
+    return Amenity(name, to_centroids(amenity_gdf))

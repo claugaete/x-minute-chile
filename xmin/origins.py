@@ -1,4 +1,5 @@
 import geopandas as gpd
+from shapely import MultiPolygon, Point, Polygon
 from tobler.util import h3fy
 
 import xmin
@@ -19,10 +20,10 @@ class Origins:
         información en https://h3geo.org/docs/core-library/restable/
     population_gdf : GeoDataFrame or None, default: None
         GeoDataFrame con datos de población. Debe tener por lo menos las
-        columnas `population` y `geometry`. No es necesario que cubra el mismo
-        área que `bounds`. Si no se recibe un GeoDataFrame, no se cargarán
-        datos de población en los orígenes y los índices que utilicen esa
-        información asumirán la misma población en cada celda.
+        columnas `population` y `geometry` (que debe contener geometrías de
+        tipo `Point`, `Polygon` o `MultiPolygon`). No es necesario que cubra el
+        mismo área que `bounds`. Si no se recibe un GeoDataFrame, se asumirá
+        una población idéntica (1) en cada origen.
     """
 
     def __init__(
@@ -36,7 +37,9 @@ class Origins:
         self._h3_resolution = h3_resolution
 
         self._h3_grid = h3fy(regions, resolution=h3_resolution)
-        if population_gdf is not None:
+        if population_gdf is None:
+            self._h3_grid["population"] = 1
+        else:
             if not (
                 "population" in population_gdf.columns
                 and "geometry" in population_gdf.columns
@@ -57,24 +60,34 @@ class Origins:
         la columna `population`.
         """
 
+        def size(shape: Point | Polygon | MultiPolygon):
+            """
+            Obtiene el "tamaño" de un objeto (1 si es un punto porque todos los
+            puntos son de igual tamaño; el área del polígono si es un
+            polígono).
+            """
+
+            return 1 if isinstance(shape, Point) else shape.area
+
         # add column with area of each zone
         population_gdf = population_gdf.to_crs(4326).assign(
-            area=population_gdf.to_crs(xmin.projected_crs).geometry.area
+            size=population_gdf.to_crs(xmin.projected_crs).geometry.map(size)
         )
 
         # overlay zones with H3 cells, splitting zones that fall between
         # multiple cells into multiple "fragments"
         population_gdf_split = population_gdf.overlay(
-            self._h3_grid.reset_index(),
-            keep_geom_type=True
+            self._h3_grid.reset_index(), keep_geom_type=True
         )
 
         # assign population to each zone fragment, proportional to the area of
         # the original zone that the split zone has
         population_gdf_split["population_split"] = (
             population_gdf_split["population"]
-            * population_gdf_split.to_crs(xmin.projected_crs).geometry.area
-            / population_gdf_split["area"]
+            * population_gdf_split.to_crs(xmin.projected_crs).geometry.map(
+                size
+            )
+            / population_gdf_split["size"]
         )
 
         # group by H3 cell to get the total population in each cell

@@ -7,8 +7,8 @@ import numpy as np
 import pandas as pd
 import r5py
 
-import xmin
 from xmin.amenities import Amenity
+from xmin.geometry import to_centroids
 from xmin.origins import Origins
 
 
@@ -169,8 +169,7 @@ class TravelTimeMatrices:
         transport_network = r5py.TransportNetwork(osm_path, gtfs_paths)
 
         # convert origins from areas to points
-        origin_points_gdf = origins.h3_grid.copy()
-        xmin._convert_geometries_to_centroids(origin_points_gdf)
+        origin_points_gdf = to_centroids(origins.h3_grid)
 
         # assign each amenity to its category and concatenate
         all_amenities = pd.concat(
