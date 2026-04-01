@@ -4,6 +4,7 @@ import warnings
 import geopandas as gpd
 import pandas as pd
 from shapely.geometry.base import BaseGeometry
+from tqdm import tqdm
 
 from xmin.amenities import Amenity
 from xmin.geometry import to_centroids
@@ -119,7 +120,8 @@ class AccessibilityRatings:
         ratings_gdf = origins.h3_grid.set_index("id")
 
         # calcular el índice particular de cada necesidad
-        for amenity, ttm in time_travel_matrices.items():
+        print("Calculando índices para cada necesidad...")
+        for amenity, ttm in tqdm(time_travel_matrices.items()):
             amenity_gdf = amenity.amenity_gdf.set_index("id")
             current_index = (
                 index_function.get(amenity)

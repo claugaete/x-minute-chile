@@ -6,6 +6,7 @@ import geopandas as gpd
 import numpy as np
 import pandas as pd
 import r5py
+from tqdm import tqdm
 
 from xmin.amenities import Amenity
 from xmin.geometry import to_centroids
@@ -16,12 +17,12 @@ def _check_duplicate_amenities(amenities: list[Amenity]):
     """
     Función helper para revisar si un conjunto de Amenities tiene nombres
     duplicados.
-    
+
     Parameters
     ---
     amenities : list[Amenity]
         Lista de necesidades a revisar.
-        
+
     Returns
     ---
     None; genera un warning si encuentra duplicados.
@@ -91,6 +92,51 @@ def try_snap_to_network(
     )
 
 
+def chunk_gdf(gdf: gpd.GeoDataFrame, chunk_size: int):
+    """Itera sobre un GeoDataFrame en chunks de tamaño `chunk_size`."""
+    for start in range(0, len(gdf), chunk_size):
+        yield gdf.iloc[start : start + chunk_size]
+
+
+def compute_matrix(
+    transport_network: r5py.TransportNetwork,
+    origins: gpd.GeoDataFrame,
+    destinations: gpd.GeoDataFrame,
+    chunk_size: int | None,
+    **kwargs,
+) -> pd.DataFrame:
+    """
+    Calcula una matriz de tiempo de viaje (TTM) con los parámetros dados,
+    usando `r5py.TravelTimeMatrix`. La única diferencia consiste en el
+    parámetro `chunk_size`; si este no es nulo, entonces el cálculo de la
+    matriz se divide en *chunks* con `chunk_size` orígenes cada uno,
+    permitiendo agregar una barra de progreso.
+    """
+
+    print("Calculando tiempos de viaje desde cada origen...")
+
+    if chunk_size is None:
+        return r5py.TravelTimeMatrix(
+            transport_network,
+            origins,
+            destinations,
+            **kwargs,
+        )
+
+    else:
+        progress_bar = tqdm(total=len(origins))
+        result = []
+        for origin_chunk in chunk_gdf(origins, chunk_size):
+            result.append(
+                r5py.TravelTimeMatrix(
+                    transport_network, origin_chunk, destinations, **kwargs
+                )
+            )
+            progress_bar.update(len(origin_chunk))
+        progress_bar.close()
+        return pd.concat(result, ignore_index=True)
+
+
 class TravelTimeMatrices:
     """
     Guarda los tiempos de viaje desde un conjunto de orígenes hacia varios
@@ -126,6 +172,7 @@ class TravelTimeMatrices:
         osm_path: str | Path,
         snap_to_network: str | bool = False,
         snap_street_mode: r5py.TransportMode | str = r5py.TransportMode.CAR,
+        chunk_size: int | None = 50,
         **kwargs,
     ) -> "TravelTimeMatrices":
         """
@@ -154,13 +201,21 @@ class TravelTimeMatrices:
                   necesidades/destinos.
                 - `True` o `"all"`: hacer "snapping" tanto a orígenes como a
                 necesidades/destinos.
-        snap_street_mode : str or r5py.TransportMode, default:
-        TransportMode.CAR
+        snap_street_mode : str or r5py.TransportMode, default: TransportMode.CAR
             Modo de transporte que deben aceptar los caminos disponibles para
             el "snapping". Irrelevante si no se aplica "snapping".
+        chunk_size : int or None, default: None
+            Cantidad de orígenes que se pasarán a `r5py.TravelTimeMatrix` en
+            cada *chunk*. Cada *chunk* es una ejecución nueva de
+            `r5py.TravelTimeMatrix`, por lo que se pierde un poco de eficiencia
+            en comparación a realizar una única llamada, pero con la ventaja de
+            poder mostrar una barra de progreso. Si se desea obtener la mayor
+            eficiencia (aunque sin barra de progreso), utilizar
+            `chunk_size=None`.
         **kwargs
             Argumentos que serán pasados al cálculo de la TTM. Puede ser
-            cualquier argumento que se pueda pasar a `r5py.RegionalTask`.
+            cualquier argumento que se pueda pasar a `r5py.RegionalTask`
+            exceptuando `snap_to_network` (que se detalla más arriba).
         """
 
         _check_duplicate_amenities(amenities)
@@ -172,7 +227,7 @@ class TravelTimeMatrices:
         origin_points_gdf = to_centroids(origins.h3_grid)
 
         # assign each amenity to its category and concatenate
-        all_amenities = pd.concat(
+        all_amenities: gpd.GeoDataFrame = pd.concat(
             [
                 amenity.amenity_gdf.assign(_amenity_id=amenity.name)
                 for amenity in amenities
@@ -193,10 +248,11 @@ class TravelTimeMatrices:
             )
 
         # calculate matrix
-        travel_time_matrix = r5py.TravelTimeMatrix(
+        travel_time_matrix = compute_matrix(
             transport_network,
             origins=origin_points_gdf,
             destinations=all_amenities,
+            chunk_size=chunk_size,
             **kwargs,
         )
         travel_time_matrix["_amenity_id"] = travel_time_matrix.merge(
