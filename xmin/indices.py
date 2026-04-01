@@ -3,6 +3,7 @@ import warnings
 
 import geopandas as gpd
 import pandas as pd
+from shapely.geometry.base import BaseGeometry
 
 from xmin.amenities import Amenity
 from xmin.origins import Origins
@@ -63,7 +64,7 @@ class AccessibilityRatings:
         self._origins = origins
         self._weights = weights
         self._gdf = gdf
-        
+
     @property
     def origins(self) -> Origins:
         """Orígenes desde los cuales se calculó la accesibilidad."""
@@ -73,7 +74,7 @@ class AccessibilityRatings:
     def weights(self) -> dict[Amenity, float]:
         """Pesos relativos de cada necesidad para el cálculo de índices."""
         return self._weights
-    
+
     @property
     def gdf(self) -> gpd.GeoDataFrame:
         """GeoDataFrame con los ratings de accesibilidad calculados."""
@@ -186,6 +187,61 @@ class AccessibilityRatings:
             )
 
         return cls(origins, weights, ratings_gdf)
+
+    def crop(
+        self,
+        new_bounds: gpd.GeoDataFrame | BaseGeometry,
+    ) -> "AccessibilityRatings":
+        """
+        Realiza un cropping al GeoDataFrame con los valores de accesibilidad,
+        considerando solo los orígenes incluídos dentro de la nueva frontera.
+
+        Parameters
+        ---
+        new_bounds : GeoDataFrame or BaseGeometry
+            Nuevos límites a considerar. Puede ser un GeoDataFrame o un
+            polígono. Si los nuevos límites no están completamente contenidos
+            en los límites antiguos, solo se considerará la intersección entre
+            ambos.
+
+        Returns
+        ---
+        Un nuevo objeto `AccessibilityRatings` solo incluyendo los orígenes
+        contenidos dentro de los nuevos límites.
+        """
+
+        new_bounds_too_large_text = (
+            "Área nueva no está completamente contenida en el área original; "
+            "solo se considerará la porción del área nueva que está contenida "
+            "en el área original."
+        )
+
+        old_regions = self.origins.regions
+        old_regions_union = old_regions.union_all()
+
+        if isinstance(new_bounds, gpd.GeoDataFrame):
+            if not new_bounds.union_all().within(old_regions_union):
+                warnings.warn(new_bounds_too_large_text)
+                new_regions = new_bounds.to_crs(4326).clip(old_regions_union)
+            else:
+                new_regions = new_bounds
+        else:
+            if not new_bounds.within(old_regions_union):
+                warnings.warn(new_bounds_too_large_text)
+            new_regions = old_regions.clip(new_bounds)
+
+        new_origins = Origins(
+            new_regions,
+            h3_resolution=self.origins.h3_resolution,
+            population_gdf=self.origins.h3_grid,
+        )
+
+        new_grid_indexed = new_origins.h3_grid.set_index("id")
+
+        # a las celdas nuevas les asignamos los ratings antiguos
+        new_ratings = self.gdf.reindex(new_grid_indexed.index)
+
+        return AccessibilityRatings(new_origins, self.weights, new_ratings)
 
 
 def calculate_weighted_index(

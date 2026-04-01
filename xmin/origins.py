@@ -32,7 +32,7 @@ class Origins:
         population_gdf: gpd.GeoDataFrame | None = None,
     ):
 
-        self._regions = regions
+        self._regions = regions.to_crs(4326)
         self._h3_resolution = h3_resolution
 
         self._h3_grid = h3fy(regions, resolution=h3_resolution)
@@ -58,14 +58,15 @@ class Origins:
         """
 
         # add column with area of each zone
-        population_gdf = population_gdf.assign(
+        population_gdf = population_gdf.to_crs(4326).assign(
             area=population_gdf.to_crs(xmin.projected_crs).geometry.area
         )
 
         # overlay zones with H3 cells, splitting zones that fall between
         # multiple cells into multiple "fragments"
         population_gdf_split = population_gdf.overlay(
-            self._h3_grid.reset_index()
+            self._h3_grid.reset_index(),
+            keep_geom_type=True
         )
 
         # assign population to each zone fragment, proportional to the area of
