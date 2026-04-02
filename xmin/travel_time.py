@@ -1,4 +1,6 @@
 from collections import Counter
+from functools import reduce
+import operator
 from pathlib import Path
 import warnings
 
@@ -280,3 +282,40 @@ class TravelTimeMatrices:
     def matrices(self) -> dict[Amenity, pd.DataFrame]:
         """Matrices de tiempo de viaje para cada necesidad."""
         return self._matrices
+
+
+def merge_ttms(
+    ttms: list[TravelTimeMatrices],
+) -> TravelTimeMatrices:
+    """
+    Une dos grupos de matrices de tiempos de viaje, calculadas sobre el mismo
+    conjunto de orígenes pero para distintas necesidades.
+
+    Parameters
+    ---
+    ttms : list[TravelTimeMatrices]
+        Lista de grupos de matrices de tiempos de viaje que se desean unir.
+        Deben tener el mismo conjunto de orígenes. Si hay una misma necesidad
+        calculada en dos o más elementos, se utilizará la del último elemento.
+
+    Returns
+    ---
+    Nuevo objeto TravelTimeMatrices con todas las matrices.
+    """
+
+    # check all origins are equal
+    origins = ttms[0].origins
+    if not all(ttm.origins == origins for ttm in ttms):
+        raise ValueError(
+            "Todos los objetos `TimeTravelMatrices` deben generarse a partir "
+            "del mismo objeto `Origins`."
+        )
+
+    # combine matrices dicts and check for duplicate amenity names (giving
+    # warning)
+    matrices: dict[Amenity, pd.DataFrame] = reduce(
+        operator.ior, iter(ttm.matrices for ttm in ttms), {}
+    )
+    _check_duplicate_amenities(matrices.keys())
+
+    return TravelTimeMatrices(origins, matrices)
