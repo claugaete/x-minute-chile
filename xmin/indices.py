@@ -117,7 +117,7 @@ class AccessibilityRatings:
         population = origins.h3_grid.set_index("id")["population"]
 
         amenity_index_values: dict[Amenity, pd.Series] = {}
-        ratings_gdf = origins.h3_grid.set_index("id")
+        ratings_gdf = origins.h3_grid.set_index("id")[["geometry"]]
 
         # calcular el índice particular de cada necesidad
         print("Calculando índices para cada necesidad...")
@@ -231,7 +231,11 @@ class AccessibilityRatings:
         new_origins = Origins(
             new_regions,
             h3_resolution=self.origins.h3_resolution,
-            population_gdf=self.origins.h3_grid,
+            h3_grid=self.origins.h3_grid[
+                to_centroids(self.origins.h3_grid).within(
+                    new_regions.union_all()
+                )
+            ],
         )
 
         new_grid_indexed = new_origins.h3_grid.set_index("id")
@@ -278,7 +282,7 @@ class AccessibilityRatings:
                 f"resolución actual ({self.origins.h3_resolution})."
             )
 
-        new_origins = Origins(
+        new_origins = Origins.create_grid(
             self.origins.regions,
             new_resolution,
             population_gdf=to_centroids(self.origins.h3_grid),
@@ -295,8 +299,8 @@ class AccessibilityRatings:
                 lsuffix="left",
                 rsuffix=None,
             )
-            .drop(columns={"id_left", "population_left"})
-            .groupby(["id", "geometry", "population"])
+            .drop(columns={"id_left"})
+            .groupby(["id", "geometry"])
             .mean()
             .reset_index()
             .set_index("id")
