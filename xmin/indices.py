@@ -246,8 +246,7 @@ class AccessibilityRatings:
         return AccessibilityRatings(new_origins, self.weights, new_ratings)
 
     def aggregate(
-        self,
-        new_resolution: int,
+        self, new_resolution: int, weighted: bool = False
     ) -> "AccessibilityRatings":
         """
         Agrega los valores de accesibilidad calculados para una resolución
@@ -288,26 +287,44 @@ class AccessibilityRatings:
             population_gdf=to_centroids(self.origins.h3_grid),
         )
 
-        # each old cell gets assigned to the new cell where its centroid falls,
-        # and we average the accessibility values
-        cell_asignment = (
-            to_centroids(self.gdf)
-            .sjoin(
-                new_origins.h3_grid,
-                how="right",
-                predicate="within",
-                lsuffix="left",
-                rsuffix=None,
+        # each old cell gets assigned to the new cell where its centroid falls
+        left_gdf = to_centroids(self.gdf)
+        if weighted:
+            left_gdf = left_gdf.join(
+                self.origins.h3_grid.set_index("id")["population"]
             )
-            .drop(columns={"id_left"})
-            .groupby(["id", "geometry"])
-            .mean()
-            .reset_index()
-            .set_index("id")
+        joined = left_gdf.sjoin(
+            new_origins.h3_grid.drop(columns="population"),
+            how="right",
+            predicate="within",
+            lsuffix="left",
+            rsuffix=None,
         )
 
+        # we average the accessibility values
+        cols_to_agg = [col for col in self.gdf.columns if col != "geometry"]
+        if not weighted:
+            averaged_accs = joined.groupby(["id", "geometry"])[
+                cols_to_agg
+            ].mean()
+        else:
+            def weighted_average(df: pd.DataFrame):
+                weights = df["population"]
+                if weights.sum() == 0:
+                    return df[cols_to_agg].mean()
+                return (
+                    df[cols_to_agg].multiply(weights, axis=0).sum()
+                    / weights.sum()
+                )
+
+            averaged_accs = joined.groupby(["id", "geometry"])[
+                cols_to_agg + ["population"]
+            ].apply(weighted_average)
+
+        averaged_accs = averaged_accs.reset_index().set_index("id")
+
         new_gdf = gpd.GeoDataFrame(
-            cell_asignment, geometry="geometry", crs=self.gdf.crs
+            averaged_accs, geometry="geometry", crs=self.gdf.crs
         )
 
         return AccessibilityRatings(new_origins, self.weights, new_gdf)
