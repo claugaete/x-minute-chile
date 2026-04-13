@@ -69,28 +69,24 @@ class MakeCenso(MakeDataset):
     """Descarga la cartografía del Censo 2024 a nivel país."""
 
     name = "censo"
+    zip_path = RAW_DATA_PATH / "censo" / "Cartografia_censo2024_Pais.zip"
 
     def download(self):
-        out_path = RAW_DATA_PATH / "censo"
-        zip_path = out_path / "Cartografia.zip"
-
         download_file(
             "https://storage.googleapis.com/bktdescargascenso2024/"
             "Cartografia/GPKG/Cartografia_censo2024_Pais.zip",
-            zip_path,
-        )
-
-        print("Extrayendo ZIP...")
-        with zipfile.ZipFile(zip_path, "r") as zip_ref:
-            zip_ref.extractall(out_path)
-        os.remove(zip_path)
-        os.rename(
-            out_path / "Cartografia_censo2024_Pais.gpkg",
-            out_path / "Cartografia.gpkg",
+            self.zip_path,
         )
 
     def clean(self):
-        pass
+        print("Extrayendo ZIP...")
+        dest_path = PROCESSED_DATA_PATH / "censo"
+        with zipfile.ZipFile(self.zip_path, "r") as zip_ref:
+            zip_ref.extractall(dest_path)
+        os.rename(
+            dest_path / "Cartografia_censo2024_Pais.gpkg",
+            dest_path / "Cartografia.gpkg",
+        )
 
 
 class MakeGtfsSantiago(MakeDataset):
@@ -141,6 +137,6 @@ if __name__ == "__main__":
     # los que no se actualizan frecuentemente)
     updated_datasets: list[MakeDataset] = [make_osm, make_gtfs_santiago]
 
-    for dataset in all_datasets:
+    for dataset in [make_censo]:
         print(f"\n--- {dataset.name.upper()} ---")
         dataset.download_and_clean()
