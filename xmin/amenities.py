@@ -56,12 +56,12 @@ class Amenity:
 
         if not self._amenity_gdf["id"].is_unique:
             raise ValueError("IDs deben ser únicas en `amenity_gdf`")
-        
+
         if bounds:
             self._amenity_gdf = self._amenity_gdf[
                 self._amenity_gdf.intersects(bounds)
             ]
-            
+
         if "weight" not in self._amenity_gdf.columns:
             self._amenity_gdf["weight"] = 1
 
@@ -113,7 +113,8 @@ def osm_amenity(
         Diccionario con el filtro que se va a pasar a OSM para obtener las
         categorías correspondientes a la necesidad. Por ejemplo, para
         centros de salud, se podría utilizar el filtro `{"amenity":
-        ["hospital", "clinic"]}`.
+        ["hospital", "clinic"]}`. Para más información sobre categorías
+        existentes, visitar https://wiki.openstreetmap.org/wiki/Map_features.
     bounds : BaseGeometry or None, default: None
         Polígono dentro del cual se desean buscar los POIs en OSM. Si no se
         especifica, se buscarán puntos en toda la geometría del archivo PBF.

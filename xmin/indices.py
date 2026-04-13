@@ -308,6 +308,7 @@ class AccessibilityRatings:
                 cols_to_agg
             ].mean()
         else:
+
             def weighted_average(df: pd.DataFrame):
                 weights = df["population"]
                 if weights.sum() == 0:
@@ -360,10 +361,10 @@ class BinaryIndex(IndexFunction):
 
 class TwoStepFca(IndexFunction):
     """
-    Índice del tipo 2-step floating catchment area (2SFCA). Calcula una razón
-    entre la cantidad de necesidades disponibles en un tiempo de viaje menor al
-    máximo (oferta), y la cantidad de personas que acceden a esas necesidades
-    (demanda).
+    Índice del tipo 2-step floating catchment area (2SFCA) [1]_. Calcula una
+    razón entre la cantidad de necesidades disponibles en un tiempo de viaje
+    menor al máximo (oferta), y la cantidad de personas que acceden a esas
+    necesidades (demanda).
 
     Parameters
     ---
@@ -382,6 +383,13 @@ class TwoStepFca(IndexFunction):
         obtenido entre los orígenes (que obtendrá el 100%), mientras que el
         resto de orígenes obtendrá valores proporcionalmente menores según sus
         resultados.
+
+    References
+    ---
+    .. [1] Luo, Wei y Fahui Wang: Measures of spatial accessibility to health
+        care in a GIS environment: synthesis and a case study in the Chicago
+        region. Environment and planning B: planning and design, 30(6):865–884,
+        2003. https://doi.org/10.1068/b29120
     """
 
     def __init__(self, threshold: float, desired_ratio: float | None):
