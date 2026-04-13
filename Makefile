@@ -40,10 +40,6 @@ format:
 
 
 
-## Run tests
-.PHONY: test
-test:
-	python -m pytest tests
 
 
 ## Set up Python interpreter environment
