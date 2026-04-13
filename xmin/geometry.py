@@ -43,9 +43,9 @@ def overlay_column(
     Parameters
     ---
     main_gdf : GeoDataFrame
-        GeoDataFrame al cual se le agregará la nueva columna.
+        GeoDataFrame a cuyos elementos se les asignará la nueva información.
     info_gdf : GeoDataFrame
-        GeoDataFrame que contiene la información que se desea agregar. Las
+        GeoDataFrame que contiene la información que se desea asignar. Las
         geometrías pueden ser de tipo `Point`, `Polygon` o `MultiPolygon`.
     column_name : str
         Nombre de la columna de `info_gdf` que se desea traspasar a `main_gdf`.
@@ -75,7 +75,7 @@ def overlay_column(
     # overlay zones with main GDF, splitting zones that fall between
     # multiple cells into multiple "fragments"
     population_gdf_split = info_gdf.overlay(
-        main_gdf.rename_axis("main_gdf_index").reset_index(),
+        main_gdf.to_crs(4326).rename_axis("main_gdf_index").reset_index(),
         keep_geom_type=True,
     )
 
