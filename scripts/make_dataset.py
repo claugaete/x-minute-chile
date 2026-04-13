@@ -9,7 +9,7 @@ import geopandas as gpd
 import pandas as pd
 import requests
 
-from xmin.dataset.download import download_file, makedir_with_warning
+from xmin.dataset.download import download_file, makedir
 from xmin.dataset.gtfs import clean_gtfs_frequencies, clean_gtfs_shapes
 
 DATA_PATH = Path(__file__).parent.resolve() / ".." / "data"
@@ -118,7 +118,7 @@ class MakeGtfsSantiago(MakeDataset):
         )
 
     def clean(self):
-        makedir_with_warning(PROCESSED_DATA_PATH / self.zip_path, is_file=True)
+        makedir(PROCESSED_DATA_PATH / self.zip_path, is_file=True)
         print("Limpiando GTFS...")
         clean_gtfs_frequencies(
             RAW_DATA_PATH / self.zip_path, PROCESSED_DATA_PATH / self.zip_path
@@ -171,6 +171,7 @@ class MakeGtfsRegional(MakeDataset):
             )
 
     def clean(self):
+        makedir(PROCESSED_DATA_PATH / "gtfs")
         n = len(self.regions.keys())
         for i, name in enumerate(self.regions.keys()):
             print(f"({i+1}/{n}) Limpiando {name}.zip...")
@@ -218,7 +219,7 @@ class MakeSalud(MakeDataset):
 
         salud_gdf["F_INICIO"] = pd.to_datetime(salud_gdf["F_INICIO"])
 
-        makedir_with_warning(dest_path)
+        makedir(dest_path)
         salud_gdf.to_file(dest_path / "establecimientos_salud.gpkg")
 
 

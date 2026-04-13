@@ -7,11 +7,11 @@ import requests
 from tqdm import tqdm
 
 
-def makedir_with_warning(path: Path, is_file: bool = False) -> None:
+def makedir(path: Path, is_file: bool = False) -> None:
     """
-    Revisa si un directorio existe, creándolo y entregando un warning si no es
-    el caso. Si `parent=True`, se asume que `path` es la ruta de un archivo, y
-    se revisa si existe el directorio que lo contiene (su padre).
+    Revisa si un directorio existe, creándolo si no es el caso. Si
+    `parent=True`, se asume que `path` es la ruta de un archivo, y se revisa si
+    existe el directorio que lo contiene (su padre).
     """
 
     path_res = path.resolve()
@@ -39,7 +39,7 @@ def download_file(url: str, download_path: Path | str, chunk_size: int = 8192):
         el progreso).
     """
 
-    makedir_with_warning(Path(download_path), is_file=True)
+    makedir(Path(download_path), is_file=True)
 
     response = requests.get(url, stream=True)
     file_size = response.headers.get("Content-Length")
