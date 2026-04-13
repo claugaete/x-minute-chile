@@ -7,23 +7,20 @@ import requests
 from tqdm import tqdm
 
 
-def makedir_with_warning(path: Path, is_file: bool = True) -> None:
+def makedir_with_warning(path: Path, is_file: bool = False) -> None:
     """
     Revisa si un directorio existe, creándolo y entregando un warning si no es
     el caso. Si `parent=True`, se asume que `path` es la ruta de un archivo, y
     se revisa si existe el directorio que lo contiene (su padre).
     """
-    
+
     path_res = path.resolve()
     if is_file:
         path_res = path_res.parent
-    
+
     if not path_res.exists():
-        warnings.warn(
-            f"La ruta {path_res} no existe, por lo que será creada."
-        )
+        warnings.warn(f"La ruta {path_res} no existe, por lo que será creada.")
         path_res.mkdir(parents=True)
-    
 
 
 def download_file(url: str, download_path: Path | str, chunk_size: int = 8192):
@@ -41,7 +38,7 @@ def download_file(url: str, download_path: Path | str, chunk_size: int = 8192):
         Número de bytes que se leen a memoria en cada paso (para ir aumentando
         el progreso).
     """
-    
+
     makedir_with_warning(Path(download_path), is_file=True)
 
     response = requests.get(url, stream=True)
@@ -49,9 +46,11 @@ def download_file(url: str, download_path: Path | str, chunk_size: int = 8192):
     last_modified = response.headers.get("Last-Modified")
     print(
         f"Descargando: {Path(download_path).name}, última modificación: "
-        + parsedate(last_modified).strftime("%Y-%m-%d")
-        if last_modified
-        else "N/A"
+        + (
+            parsedate(last_modified).strftime("%Y-%m-%d")
+            if last_modified
+            else "N/A"
+        )
     )
     if file_size is None:
         progress_bar = tqdm(unit="B", unit_scale=True)

@@ -5,6 +5,8 @@ from pathlib import Path
 import zipfile
 
 from bs4 import BeautifulSoup
+import geopandas as gpd
+import pandas as pd
 import requests
 
 from xmin.dataset.download import download_file, makedir_with_warning
@@ -12,6 +14,7 @@ from xmin.dataset.gtfs import clean_gtfs_frequencies, clean_gtfs_shapes
 
 DATA_PATH = Path(__file__).parent.resolve() / ".." / "data"
 RAW_DATA_PATH = DATA_PATH / "raw"
+INTERIM_DATA_PATH = DATA_PATH / "interim"
 PROCESSED_DATA_PATH = DATA_PATH / "processed"
 
 
@@ -177,17 +180,61 @@ class MakeGtfsRegional(MakeDataset):
             )
 
 
+class MakeSalud(MakeDataset):
+    """
+    Descarga y limpia datos de establecimientos de salud en Chile, de diciembre
+    de 2025. Estos datos son entregados por el Ministerio de Salud en el
+    siguiente enlace:
+    https://geoportal.cl/geoportal/catalog/36779/Establecimientos%20de%20salud%20de%20Chile%20Diciembre%202025.
+    """
+
+    name = "salud"
+    zip_path = (
+        RAW_DATA_PATH / "amenities" / "salud" / "establecimientos_salud.zip"
+    )
+
+    def download(self):
+        download_file(
+            "https://geoportal.cl/geoportal/catalog/download/5b2f29d1-94d4-398f-a207-7f9f3056e5d1",
+            self.zip_path,
+        )
+
+    def clean(self):
+        print("Extrayendo ZIP...")
+        interim_path = INTERIM_DATA_PATH / "amenities" / "salud"
+        dest_path = PROCESSED_DATA_PATH / "amenities" / "salud"
+        with zipfile.ZipFile(self.zip_path, "r") as zip_ref:
+            zip_ref.extractall(interim_path)
+
+        print("Limpiando GeoDataFrame...")
+        salud_gdf = gpd.read_file(interim_path)
+        salud_gdf = salud_gdf.rename(columns={"ID_ORIG": "id"})
+
+        # cambiar floats a int (excepto latitud y longitud)
+        int_cols = salud_gdf.select_dtypes(include=["float"]).columns.drop(
+            ["LATITUD", "LONGITUD"]
+        )
+        salud_gdf[int_cols] = salud_gdf[int_cols].astype(int)
+
+        salud_gdf["F_INICIO"] = pd.to_datetime(salud_gdf["F_INICIO"])
+
+        makedir_with_warning(dest_path)
+        salud_gdf.to_file(dest_path / "establecimientos_salud.gpkg")
+
+
 if __name__ == "__main__":
     make_osm = MakeOsm()
     make_censo = MakeCenso()
     make_gtfs_santiago = MakeGtfsSantiago()
     make_gtfs_regional = MakeGtfsRegional()
+    make_salud = MakeSalud()
 
     all_datasets: list[MakeDataset] = [
         make_osm,
         make_censo,
         make_gtfs_santiago,
         make_gtfs_regional,
+        make_salud,
     ]
 
     # datasets que reciben actualizaciones frecuentes (para evitar descargar
