@@ -35,7 +35,7 @@ def seconds_to_gtfs_time(total_seconds: float) -> str:
     return f"{time[0]}:{time[1]}:{time[2]}"
 
 
-def clean_gtfs(inpath: str | Path, outpath: str | Path):
+def clean_gtfs_frequencies(inpath: str | Path, outpath: str | Path):
     """
     Limpia un archivo GTFS, eliminando `frequencies.txt` y modificando
     `stop_times.txt` y `trips.txt`, dejando un GTFS con igual comportamiento.
@@ -118,4 +118,21 @@ def clean_gtfs(inpath: str | Path, outpath: str | Path):
     new_feed.set("frequencies.txt", ptg.utilities.empty_df())
     new_feed.set("shapes.txt", ptg.utilities.empty_df())
 
+    ptg.writers.write_feed_dangerously(new_feed, str(outpath))
+
+
+def clean_gtfs_shapes(inpath: str | Path, outpath: str | Path):
+    """
+    Limpia un archivo GTFS, eliminando `shapes.txt` al no utilizarse.
+
+    Parameters
+    ---
+    inpath : str or Path
+        Ruta de archivo GTFS a modificar.
+    outpath : str or Path
+        Ruta de archivo GTFS modificado.
+    """
+
+    new_feed = ptg.load_raw_feed(inpath)
+    new_feed.set("shapes.txt", ptg.utilities.empty_df())
     ptg.writers.write_feed_dangerously(new_feed, str(outpath))

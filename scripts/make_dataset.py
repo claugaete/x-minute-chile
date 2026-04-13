@@ -8,7 +8,7 @@ from bs4 import BeautifulSoup
 import requests
 
 from xmin.dataset.download import download_file, makedir_with_warning
-from xmin.dataset.gtfs import clean_gtfs
+from xmin.dataset.gtfs import clean_gtfs_frequencies, clean_gtfs_shapes
 
 DATA_PATH = Path(__file__).parent.resolve() / ".." / "data"
 RAW_DATA_PATH = DATA_PATH / "raw"
@@ -117,26 +117,83 @@ class MakeGtfsSantiago(MakeDataset):
     def clean(self):
         makedir_with_warning(PROCESSED_DATA_PATH / self.zip_path, is_file=True)
         print("Limpiando GTFS...")
-        clean_gtfs(
+        clean_gtfs_frequencies(
             RAW_DATA_PATH / self.zip_path, PROCESSED_DATA_PATH / self.zip_path
         )
+
+
+class MakeGtfsRegional(MakeDataset):
+    """
+    Descarga y limpia los GTFS de regiones, obtenidos desde la página de la
+    DTPR:
+    https://dtpr.gob.cl/tramites-operadores/sistemas-regulados-de-transporte-publico-mayor/.
+
+    Debido a la poca estructura de la página de la DTPR, se deben agregar
+    manualmente los enlaces a descargar. Esto implica que no se agregarán
+    nuevas ciudades automáticamente aunque estas aparezcan en la página de la
+    DTPR, y es muy posible que el método `download()` se rompa si la DTPR
+    decide cambiar los enlaces de descarga.
+    """
+
+    name = "gtfs-regional"
+
+    # regiones con GTFS disponible, y su enlace de descarga
+    regions = {
+        "Antofagasta": "2025/12/antofagasta.zip",
+        "Buin_Paine": "2025/12/buin-Paine.zip",
+        "Calama": "2025/12/calama.zip",
+        "Castro": "2025/12/castro.zip",
+        "Chillan": "2022/08/chillan.zip",
+        "Concepcion": "2025/12/granconcepcion.zip",
+        "Iquique": "2025/12/iquique.zip",
+        "Linares": "2025/12/linares.zip",
+        "Osorno": "2025/12/osorno.zip",
+        "Puerto_Montt": "2025/12/Puerto_Montt.zip",
+        "Punta_Arenas": "2025/12/PuntaArenas.zip",
+        "Quellon": "2025/12/quellon.zip",
+        "Quintero_Puchuncavi": "2025/12/Quintero-Puchuncavi.zip",
+        "Temuco": "2025/12/Temuco.zip",
+        "Tocopilla": "2025/12/tocopilla.zip",
+        "Tome": "2025/12/tome.zip",
+        "Valdivia": "2025/12/valdivia.zip",
+        "Valparaiso": "2025/12/GranValparaiso.zip",
+        "Villarrica": "2025/12/villarrica.zip",
+    }
+
+    def download(self):
+        base_url = "https://dtpr.gob.cl/wp-content/uploads/"
+        for name, url in self.regions.items():
+            download_file(
+                base_url + url, RAW_DATA_PATH / "gtfs" / f"{name}.zip"
+            )
+
+    def clean(self):
+        n = len(self.regions.keys())
+        for i, name in enumerate(self.regions.keys()):
+            print(f"({i+1}/{n}) Limpiando {name}.zip...")
+            clean_gtfs_shapes(
+                RAW_DATA_PATH / "gtfs" / f"{name}.zip",
+                PROCESSED_DATA_PATH / "gtfs" / f"{name}.zip",
+            )
 
 
 if __name__ == "__main__":
     make_osm = MakeOsm()
     make_censo = MakeCenso()
     make_gtfs_santiago = MakeGtfsSantiago()
+    make_gtfs_regional = MakeGtfsRegional()
 
     all_datasets: list[MakeDataset] = [
         make_osm,
         make_censo,
         make_gtfs_santiago,
+        make_gtfs_regional,
     ]
 
     # datasets que reciben actualizaciones frecuentes (para evitar descargar
     # los que no se actualizan frecuentemente)
     updated_datasets: list[MakeDataset] = [make_osm, make_gtfs_santiago]
 
-    for dataset in [make_censo]:
+    for dataset in all_datasets:
         print(f"\n--- {dataset.name.upper()} ---")
         dataset.download_and_clean()
