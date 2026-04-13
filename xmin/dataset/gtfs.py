@@ -61,6 +61,7 @@ def clean_gtfs(inpath: str | Path, outpath: str | Path):
         trips_by_id[trip.trip_id] = dict(trip)
 
     # get stop sequence for each trip
+    print("(1/4) Obteniendo ruta de cada viaje...")
     trip_patterns = {}
     for trip_id, stop_times in feed.stop_times.sort_values(
         "stop_sequence"
@@ -71,6 +72,7 @@ def clean_gtfs(inpath: str | Path, outpath: str | Path):
         trip_patterns[trip_id] = (stops_df, times)
 
     # "duplicate" trips according to their frequency
+    print("(2/4) Duplicando viajes según frecuencia...")
     freq_trips = []
     for _, freq in feed.frequencies.iterrows():
         window_start = int(freq.start_time)
@@ -84,6 +86,7 @@ def clean_gtfs(inpath: str | Path, outpath: str | Path):
             )
 
     # assign new trips (each with their unique id) and corresponding stops
+    print("(3/4) Agregando viajes nuevos a GTFS...")
     new_trips = []
     new_stop_times = []
     for i, ftrip in enumerate(freq_trips, start=1):
@@ -103,6 +106,7 @@ def clean_gtfs(inpath: str | Path, outpath: str | Path):
                 }
             )
 
+    print("(4/4) Escribiendo archivos...")
     trips_df = pd.DataFrame(new_trips)
     stop_times_df = pd.DataFrame(new_stop_times)
 
@@ -115,9 +119,3 @@ def clean_gtfs(inpath: str | Path, outpath: str | Path):
     new_feed.set("shapes.txt", ptg.utilities.empty_df())
 
     ptg.writers.write_feed_dangerously(new_feed, str(outpath))
-
-
-if __name__ == "__main__":
-    inpath = input("Ruta de GTFS input: ")
-    outpath = input("Ruta de GTFS output: ")
-    clean_gtfs(inpath, outpath)

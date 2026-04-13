@@ -1,14 +1,35 @@
 # helper functions for downloading files
 from pathlib import Path
+import warnings
 
 from dateutil.parser import parse as parsedate
 import requests
 from tqdm import tqdm
 
 
+def makedir_with_warning(path: Path, is_file: bool = True) -> None:
+    """
+    Revisa si un directorio existe, creándolo y entregando un warning si no es
+    el caso. Si `parent=True`, se asume que `path` es la ruta de un archivo, y
+    se revisa si existe el directorio que lo contiene (su padre).
+    """
+    
+    path_res = path.resolve()
+    if is_file:
+        path_res = path_res.parent
+    
+    if not path_res.exists():
+        warnings.warn(
+            f"La ruta {path_res} no existe, por lo que será creada."
+        )
+        path_res.mkdir(parents=True)
+    
+
+
 def download_file(url: str, download_path: Path | str, chunk_size: int = 8192):
     """
-    Descarga un archivo, mostrando una barra de progreso
+    Descarga un archivo, mostrando una barra de progreso y asegurándose que el
+    directorio exista antes de guardar el archivo.
 
     Parameters
     ---
@@ -21,7 +42,7 @@ def download_file(url: str, download_path: Path | str, chunk_size: int = 8192):
         el progreso).
     """
     
-    Path(download_path).parent.mkdir(parents=True, exist_ok=True)
+    makedir_with_warning(Path(download_path), is_file=True)
 
     response = requests.get(url, stream=True)
     file_size = response.headers.get("Content-Length")

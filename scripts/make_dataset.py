@@ -4,7 +4,11 @@ import os
 from pathlib import Path
 import zipfile
 
-from xmin.dataset.download import download_file
+from bs4 import BeautifulSoup
+import requests
+
+from xmin.dataset.download import download_file, makedir_with_warning
+from xmin.dataset.gtfs import clean_gtfs
 
 DATA_PATH = Path(__file__).parent.resolve() / ".." / "data"
 RAW_DATA_PATH = DATA_PATH / "raw"
@@ -89,15 +93,53 @@ class MakeCenso(MakeDataset):
         pass
 
 
+class MakeGtfsSantiago(MakeDataset):
+    """
+    Descarga y limpia el GTFS de Santiago, desde la página del DTPM:
+    https://www.dtpm.cl/index.php/noticias/gtfs-vigente/. Descarga el primer
+    archivo disponible, sin considerar eventos especiales.
+    """
+
+    name = "gtfs-santiago"
+    zip_path = "gtfs/Santiago.zip"
+
+    def download(self):
+        url = "https://www.dtpm.cl/index.php/noticias/gtfs-vigente/"
+
+        # finding the correct download link
+        response = requests.get(url)
+        soup = BeautifulSoup(response.text, "html.parser")
+        link = soup.find(
+            "a", href=lambda h: h and "/descargas/gtfs" in h.lower()
+        )
+
+        download_file(
+            "https://www.dtpm.cl/" + link["href"],
+            RAW_DATA_PATH / self.zip_path,
+        )
+
+    def clean(self):
+        makedir_with_warning(PROCESSED_DATA_PATH / self.zip_path, is_file=True)
+        print("Limpiando GTFS...")
+        clean_gtfs(
+            RAW_DATA_PATH / self.zip_path, PROCESSED_DATA_PATH / self.zip_path
+        )
+
+
 if __name__ == "__main__":
     make_osm = MakeOsm()
     make_censo = MakeCenso()
+    make_gtfs_santiago = MakeGtfsSantiago()
 
-    all_datasets: list[MakeDataset] = [make_osm, make_censo]
+    all_datasets: list[MakeDataset] = [
+        make_osm,
+        make_censo,
+        make_gtfs_santiago,
+    ]
 
     # datasets que reciben actualizaciones frecuentes (para evitar descargar
     # los que no se actualizan frecuentemente)
-    updated_datasets: list[MakeDataset] = [make_osm]
+    updated_datasets: list[MakeDataset] = [make_osm, make_gtfs_santiago]
 
     for dataset in all_datasets:
         print(f"\n--- {dataset.name.upper()} ---")
