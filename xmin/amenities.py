@@ -95,6 +95,7 @@ def osm_amenity(
     name: str,
     osm_path: str | Path,
     osm_filter: dict,
+    keep_all_tags: bool | list[str] = True,
     bounds: BaseGeometry | None = None,
     use_area_as_weight: bool = False,
     area_to_weight_function: Callable[[float], float] = lambda x: x,
@@ -115,6 +116,11 @@ def osm_amenity(
         centros de salud, se podría utilizar el filtro `{"amenity":
         ["hospital", "clinic"]}`. Para más información sobre categorías
         existentes, visitar https://wiki.openstreetmap.org/wiki/Map_features.
+    keep_all_tags : bool, default: True
+        Si es verdadero, se guarda cada etiqueta en su propia columna del
+        GeoDataFrame. Si es falso, se eliminan las etiquetas asociadas a cada
+        POI (lo cual hace el GeoDataFrame más ligero). Si es una lista, solo se
+        guardan las etiquetas incluidas en la lista.
     bounds : BaseGeometry or None, default: None
         Polígono dentro del cual se desean buscar los POIs en OSM. Si no se
         especifica, se buscarán puntos en toda la geometría del archivo PBF.
@@ -140,10 +146,14 @@ def osm_amenity(
             tags_filter=osm_filter,
             working_directory=xmin.quackosm_working_directory,
             geometry_filter=bounds,
+            keep_all_tags=False if not keep_all_tags else True,
+            explode_tags=True,
         )
         .rename_axis("id")
         .reset_index()
     )
+    if isinstance(keep_all_tags, list):
+        amenity_gdf = amenity_gdf[["id"] + keep_all_tags + ["geometry"]]
     if use_area_as_weight:
         amenity_gdf["weight"] = amenity_gdf.to_crs(
             xmin.projected_crs
