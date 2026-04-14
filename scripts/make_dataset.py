@@ -20,6 +20,36 @@ INTERIM_DATA_PATH = DATA_PATH / "interim"
 PROCESSED_DATA_PATH = DATA_PATH / "processed"
 
 
+def unzip(zip_path: Path, out_dir: Path):
+    """Extrae un ZIP en `zip_path` a la carpeta `out_dir`."""
+    with zipfile.ZipFile(zip_path, "r") as zip_ref:
+        zip_ref.extractall(out_dir)
+
+
+def _clean_ide_dataset_numbers(
+    extracted_shp_path: Path,
+    keep_as_float: list[str] = ["LATITUD", "LONGITUD"],
+) -> gpd.GeoDataFrame:
+    """
+    Lee un GeoDataFrame y cambia todas las columnas que son float a int, excepto latitud y longitud (que deberían mantenerse como float). Esto ocurre para los datasets descargados desde el Geoportal de IDE Chile (https://geoportal.cl/catalog).
+
+    Parameters
+    ---
+    extracted_shp_path : Path
+        Ruta al archivo Shapefile a leer.
+
+    Returns
+    ---
+    GeoDataFrame con los números corregidos.
+    """
+
+    gdf = gpd.read_file(extracted_shp_path)
+    int_cols = gdf.select_dtypes(include=["float"]).columns.drop(keep_as_float)
+    gdf[int_cols] = gdf[int_cols].astype(int)
+
+    return gdf
+
+
 class MakeDataset(ABC):
     """
     Interfaz para clases que tienen dos funcionalidades: - Descargar archivos y
@@ -87,8 +117,7 @@ class MakeCenso(MakeDataset):
     def clean(self):
         print("Extrayendo ZIP...")
         interim_path = INTERIM_DATA_PATH / "censo"
-        with zipfile.ZipFile(self.zip_path, "r") as zip_ref:
-            zip_ref.extractall(interim_path)
+        unzip(self.zip_path, interim_path)
 
         input_gpkg = interim_path / "Cartografia_censo2024_Pais.gpkg"
         output_gpkg = PROCESSED_DATA_PATH / "censo" / "Cartografia.gpkg"
@@ -195,51 +224,6 @@ class MakeGtfsRegional(MakeDataset):
             )
 
 
-class MakeSalud(MakeDataset):
-    """
-    Descarga y limpia datos de establecimientos de salud en Chile, de diciembre
-    de 2025. Estos datos son entregados por el Ministerio de Salud en el
-    siguiente enlace:
-    https://geoportal.cl/geoportal/catalog/36779/Establecimientos%20de%20salud%20de%20Chile%20Diciembre%202025.
-    """
-
-    name = "salud"
-    zip_path = (
-        RAW_DATA_PATH / "amenities" / "salud" / "establecimientos_salud.zip"
-    )
-
-    def download(self):
-        download_file(
-            "https://geoportal.cl/geoportal/catalog/download/5b2f29d1-94d4-398f-a207-7f9f3056e5d1",
-            self.zip_path,
-        )
-
-    def clean(self):
-        print("Extrayendo ZIP...")
-        interim_path = INTERIM_DATA_PATH / "amenities" / "salud"
-        dest_path = PROCESSED_DATA_PATH / "amenities" / "salud"
-        with zipfile.ZipFile(self.zip_path, "r") as zip_ref:
-            zip_ref.extractall(interim_path)
-
-        print("Limpiando GeoDataFrame...")
-        salud_gdf = gpd.read_file(
-            interim_path
-            / "l_910_v1_establecimientos_de_salud_diciembre_2025.shp"
-        )
-        salud_gdf = salud_gdf.rename(columns={"ID_ORIG": "id"})
-
-        # cambiar floats a int (excepto latitud y longitud)
-        int_cols = salud_gdf.select_dtypes(include=["float"]).columns.drop(
-            ["LATITUD", "LONGITUD"]
-        )
-        salud_gdf[int_cols] = salud_gdf[int_cols].astype(int)
-
-        salud_gdf["F_INICIO"] = pd.to_datetime(salud_gdf["F_INICIO"])
-
-        makedir(dest_path)
-        salud_gdf.to_file(dest_path / "establecimientos_salud.gpkg")
-
-
 class MakeFarmacias(MakeDataset):
     """
     Descarga y limpia datos de farmacias en Chile, actualizados diariamente por
@@ -343,6 +327,43 @@ class MakeFarmacias(MakeDataset):
         )
         makedir(gpkg_path, is_file=True)
         farmacias_gdf.to_file(gpkg_path)
+
+
+class MakeSalud(MakeDataset):
+    """
+    Descarga y limpia datos de establecimientos de salud en Chile, de diciembre
+    de 2025. Estos datos son entregados por el Ministerio de Salud en el
+    siguiente enlace:
+    https://geoportal.cl/geoportal/catalog/36779/Establecimientos%20de%20salud%20de%20Chile%20Diciembre%202025.
+    """
+
+    name = "salud"
+    zip_path = (
+        RAW_DATA_PATH / "amenities" / "salud" / "establecimientos_salud.zip"
+    )
+
+    def download(self):
+        download_file(
+            "https://geoportal.cl/geoportal/catalog/download/5b2f29d1-94d4-398f-a207-7f9f3056e5d1",
+            self.zip_path,
+        )
+
+    def clean(self):
+        print("Extrayendo ZIP...")
+        interim_path = INTERIM_DATA_PATH / "amenities" / "salud"
+        dest_path = PROCESSED_DATA_PATH / "amenities" / "salud"
+        unzip(self.zip_path, interim_path)
+
+        print("Creando archivo GeoPackage...")
+        salud_gdf = _clean_ide_dataset_numbers(
+            interim_path
+            / "l_910_v1_establecimientos_de_salud_diciembre_2025.shp"
+        )
+        salud_gdf = salud_gdf.rename(columns={"ID_ORIG": "id"})
+        salud_gdf["F_INICIO"] = pd.to_datetime(salud_gdf["F_INICIO"])
+
+        makedir(dest_path)
+        salud_gdf.to_file(dest_path / "establecimientos_salud.gpkg")
 
 
 if __name__ == "__main__":
