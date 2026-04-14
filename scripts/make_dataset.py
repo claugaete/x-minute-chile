@@ -1,6 +1,8 @@
 # script para descargar datos de Chile (actualizados)
 from abc import ABC, abstractmethod
+import json
 from pathlib import Path
+import re
 import zipfile
 
 from bs4 import BeautifulSoup
@@ -87,10 +89,10 @@ class MakeCenso(MakeDataset):
         interim_path = INTERIM_DATA_PATH / "censo"
         with zipfile.ZipFile(self.zip_path, "r") as zip_ref:
             zip_ref.extractall(interim_path)
-            
+
         input_gpkg = interim_path / "Cartografia_censo2024_Pais.gpkg"
         output_gpkg = PROCESSED_DATA_PATH / "censo" / "Cartografia.gpkg"
-        
+
         print("Convirtiendo capas a EPSG:4326...")
         layers = gpd.list_layers(input_gpkg)["name"].tolist()
         for i, layer in tqdm(enumerate(layers), total=len(layers)):
@@ -238,12 +240,118 @@ class MakeSalud(MakeDataset):
         salud_gdf.to_file(dest_path / "establecimientos_salud.gpkg")
 
 
+class MakeFarmacias(MakeDataset):
+    """
+    Descarga y limpia datos de farmacias en Chile, actualizados diariamente por
+    el Ministerio de Salud.
+    """
+
+    name = "farmacias"
+
+    json_path = RAW_DATA_PATH / "amenities" / "farmacias" / "farmacias.json"
+
+    def _fix_coord_format(self, coord_str: str) -> str:
+        """
+        Corrige posibles errores de formato de una string que representa una
+        coordenada (p. ej. -70.543). Los errores que corrige son los
+        siguientes:
+
+        - Un guión en vez de un punto para el separador decimal.
+        - Uno o más caracteres extra al final del número (por ejemplo, comas o
+        símbolos de grado (°)).
+
+        Si el string tiene otro tipo de error (p. ej. no es un número en
+        absoluto), se retorna el string original.
+
+        Parameters
+        ---
+        coord_str : str
+            String a corregir.
+
+        Returns
+        ---
+        String corregido si se encontró un error corregible; string original si
+        no.
+        """
+
+        # optional leading dash, followed by digits, followed by period/dash,
+        # followed by digits, followed by extra stuff
+        pattern = r"^(-?\d+)[.-](\d+)[^\d]*$"
+        match = re.match(pattern, coord_str)
+
+        if match:
+            return f"{match.group(1)}.{match.group(2)}"
+
+        # if no match is captured, return string as-is
+        return coord_str
+
+    def _fix_coord_series_format(self, coord_series: pd.Series) -> pd.Series:
+        """
+        Aplica `self._fix_cord_format` a una serie de pandas e intenta
+        convertir los strings a números. Los strings que no se pueden convertir
+        serán retornados como nulos.
+
+        Parameters
+        ---
+        coord_series : pd.Series
+            Serie con strings que representan coordenadas.
+
+        Returns
+        ---
+        Serie con números que representan las coordenadas corregidas (o nulo si
+        no se logró convertir a un número).
+        """
+        return pd.to_numeric(
+            coord_series.apply(self._fix_coord_format), errors="coerce"
+        )
+
+    def download(self):
+        download_file(
+            "https://midas.minsal.cl/farmacia_v2/WS/getLocales.php",
+            self.json_path,
+        )
+
+    def clean(self):
+        print("Creando archivo GeoPackage...")
+        with open(self.json_path, "r") as file:
+            data = json.load(file)
+        farmacias_df = pd.DataFrame(data)
+        farmacias_gdf = gpd.GeoDataFrame(
+            farmacias_df,
+            geometry=gpd.points_from_xy(
+                self._fix_coord_series_format(farmacias_df["local_lng"]),
+                self._fix_coord_series_format(farmacias_df["local_lat"]),
+                crs=4326,
+            ),
+        )
+
+        # quitamos columnas innecesarias y renombramos otras
+        farmacias_gdf = farmacias_gdf.drop(
+            columns=["fecha", "funcionamiento_dia"]
+        ).rename(
+            columns={
+                "local_id": "id",
+                "local_nombre": "name",
+                "comuna_nombre": "comuna",
+                "localidad_nombre": "localidad",
+                "local_direccion": "direccion",
+            }
+        )
+
+        gpkg_path = (
+            PROCESSED_DATA_PATH / "amenities" / "farmacias" / "farmacias.gpkg"
+        )
+        makedir(gpkg_path, is_file=True)
+        farmacias_gdf.to_file(gpkg_path)
+
+
 if __name__ == "__main__":
     make_osm = MakeOsm()
     make_censo = MakeCenso()
     make_gtfs_santiago = MakeGtfsSantiago()
     make_gtfs_regional = MakeGtfsRegional()
     make_salud = MakeSalud()
+    make_farmacias = MakeFarmacias()
 
     all_datasets: list[MakeDataset] = [
         make_osm,
@@ -251,12 +359,17 @@ if __name__ == "__main__":
         make_gtfs_santiago,
         make_gtfs_regional,
         make_salud,
+        make_farmacias,
     ]
 
     # datasets que reciben actualizaciones frecuentes (para evitar descargar
     # los que no se actualizan frecuentemente)
-    updated_datasets: list[MakeDataset] = [make_osm, make_gtfs_santiago]
+    updated_datasets: list[MakeDataset] = [
+        make_osm,
+        make_gtfs_santiago,
+        make_farmacias,
+    ]
 
     for dataset in all_datasets:
         print(f"\n--- {dataset.name.upper()} ---")
-        dataset.clean()
+        dataset.download_and_clean()
