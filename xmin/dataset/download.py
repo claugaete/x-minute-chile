@@ -23,7 +23,9 @@ def makedir(path: Path, is_file: bool = False) -> None:
         path_res.mkdir(parents=True)
 
 
-def download_file(url: str, download_path: Path | str, chunk_size: int = 8192):
+def download_file(
+    url: str, download_path: Path | str, chunk_size: int = 8192, **kwargs
+):
     """
     Descarga un archivo, mostrando una barra de progreso y asegurándose que el
     directorio exista antes de guardar el archivo.
@@ -37,6 +39,9 @@ def download_file(url: str, download_path: Path | str, chunk_size: int = 8192):
     chunk_size : int, default: 8192
         Número de bytes que se leen a memoria en cada paso (para ir aumentando
         el progreso).
+    **kwargs
+        Argumentos que serán pasados a la barra de progreso, creada con
+        `tqdm.tqdm`.
     """
 
     makedir(Path(download_path), is_file=True)
@@ -44,18 +49,21 @@ def download_file(url: str, download_path: Path | str, chunk_size: int = 8192):
     response = requests.get(url, stream=True)
     file_size = response.headers.get("Content-Length")
     last_modified = response.headers.get("Last-Modified")
-    print(
-        f"Descargando: {Path(download_path).name}, última modificación: "
-        + (
-            parsedate(last_modified).strftime("%Y-%m-%d")
-            if last_modified
-            else "N/A"
-        )
+    desc = f"Descargando {Path(download_path).name}, últ. mod.: " + (
+        parsedate(last_modified).strftime("%Y-%m-%d")
+        if last_modified
+        else "N/A"
     )
     if file_size is None:
-        progress_bar = tqdm(unit="B", unit_scale=True)
+        progress_bar = tqdm(unit="B", unit_scale=True, desc=desc, **kwargs)
     else:
-        progress_bar = tqdm(unit="B", unit_scale=True, total=int(file_size))
+        progress_bar = tqdm(
+            unit="B",
+            unit_scale=True,
+            total=int(file_size),
+            desc=desc,
+            **kwargs,
+        )
 
     with open(download_path, mode="wb") as file:
         for chunk in response.iter_content(chunk_size=chunk_size):

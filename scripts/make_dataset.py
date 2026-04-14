@@ -8,6 +8,7 @@ from bs4 import BeautifulSoup
 import geopandas as gpd
 import pandas as pd
 import requests
+from tqdm import tqdm
 
 from xmin.dataset.download import download_file, makedir
 from xmin.dataset.gtfs import clean_gtfs_frequencies, clean_gtfs_shapes
@@ -72,7 +73,7 @@ class MakeCenso(MakeDataset):
     """Descarga la cartografía del Censo 2024 a nivel país."""
 
     name = "censo"
-    zip_path = RAW_DATA_PATH / "censo" / "Cartografia_censo2024_Pais.zip"
+    zip_path = RAW_DATA_PATH / "censo" / "Cartografia.zip"
 
     def download(self):
         download_file(
@@ -165,16 +166,19 @@ class MakeGtfsRegional(MakeDataset):
 
     def download(self):
         base_url = "https://dtpr.gob.cl/wp-content/uploads/"
-        for name, url in self.regions.items():
+        for name, url in tqdm(self.regions.items()):
             download_file(
-                base_url + url, RAW_DATA_PATH / "gtfs" / f"{name}.zip"
+                base_url + url,
+                RAW_DATA_PATH / "gtfs" / f"{name}.zip",
+                leave=False,
             )
 
     def clean(self):
         makedir(PROCESSED_DATA_PATH / "gtfs")
-        n = len(self.regions.keys())
-        for i, name in enumerate(self.regions.keys()):
-            print(f"({i+1}/{n}) Limpiando {name}.zip...")
+        print("Limpiando archivos GTFS...")
+        pbar = tqdm(self.regions.keys())
+        for name in pbar:
+            pbar.set_description(f"{name}.zip")
             clean_gtfs_shapes(
                 RAW_DATA_PATH / "gtfs" / f"{name}.zip",
                 PROCESSED_DATA_PATH / "gtfs" / f"{name}.zip",
