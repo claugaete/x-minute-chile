@@ -212,7 +212,10 @@ class MakeSalud(MakeDataset):
             zip_ref.extractall(interim_path)
 
         print("Limpiando GeoDataFrame...")
-        salud_gdf = gpd.read_file(interim_path)
+        salud_gdf = gpd.read_file(
+            interim_path
+            / "l_910_v1_establecimientos_de_salud_diciembre_2025.shp"
+        )
         salud_gdf = salud_gdf.rename(columns={"ID_ORIG": "id"})
 
         # cambiar floats a int (excepto latitud y longitud)
