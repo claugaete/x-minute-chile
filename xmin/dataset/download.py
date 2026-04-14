@@ -19,7 +19,6 @@ def makedir(path: Path, is_file: bool = False) -> None:
         path_res = path_res.parent
 
     if not path_res.exists():
-        warnings.warn(f"La ruta {path_res} no existe, por lo que será creada.")
         path_res.mkdir(parents=True)
 
 
