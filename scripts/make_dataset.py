@@ -1,6 +1,5 @@
 # script para descargar datos de Chile (actualizados)
 from abc import ABC, abstractmethod
-import os
 from pathlib import Path
 import zipfile
 
@@ -70,7 +69,8 @@ class MakeOsm(MakeDataset):
 
 
 class MakeCenso(MakeDataset):
-    """Descarga la cartografía del Censo 2024 a nivel país."""
+    """Descarga la cartografía del Censo 2024 a nivel país, convirtiendo todas
+    las capas al CRS EPSG:4326 (usado en el resto del proyecto)."""
 
     name = "censo"
     zip_path = RAW_DATA_PATH / "censo" / "Cartografia.zip"
@@ -84,13 +84,21 @@ class MakeCenso(MakeDataset):
 
     def clean(self):
         print("Extrayendo ZIP...")
-        dest_path = PROCESSED_DATA_PATH / "censo"
+        interim_path = INTERIM_DATA_PATH / "censo"
         with zipfile.ZipFile(self.zip_path, "r") as zip_ref:
-            zip_ref.extractall(dest_path)
-        os.rename(
-            dest_path / "Cartografia_censo2024_Pais.gpkg",
-            dest_path / "Cartografia.gpkg",
-        )
+            zip_ref.extractall(interim_path)
+            
+        input_gpkg = interim_path / "Cartografia_censo2024_Pais.gpkg"
+        output_gpkg = PROCESSED_DATA_PATH / "censo" / "Cartografia.gpkg"
+        
+        print("Convirtiendo capas a EPSG:4326...")
+        layers = gpd.list_layers(input_gpkg)["name"].tolist()
+        for i, layer in tqdm(enumerate(layers), total=len(layers)):
+            gdf = gpd.read_file(input_gpkg, layer=layer)
+            if gdf.crs is not None:
+                gdf = gdf.to_crs(4326)
+            mode = "w" if i == 0 else "a"
+            gdf.to_file(output_gpkg, layer=layer, driver="GPKG", mode=mode)
 
 
 class MakeGtfsSantiago(MakeDataset):
@@ -251,4 +259,4 @@ if __name__ == "__main__":
 
     for dataset in all_datasets:
         print(f"\n--- {dataset.name.upper()} ---")
-        dataset.download_and_clean()
+        dataset.clean()
