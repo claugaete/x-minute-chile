@@ -5,6 +5,8 @@ import tempfile
 
 from shapely.geometry import MultiPolygon, Polygon
 
+from xmin.dataset.download import makedir
+
 
 def shapely_to_osmosis_polygon(
     poly: Polygon | MultiPolygon, name: str = "polygon"
@@ -68,6 +70,7 @@ def extract_osm_subset(
     with tempfile.NamedTemporaryFile(mode="w", suffix=".poly") as tmp:
         tmp.write(shapely_to_osmosis_polygon(bounds))
         tmp.flush()
+        makedir(Path(outpath), is_file=True)
         subprocess.run(
             ["osmconvert", inpath, f"-B={tmp.name}", f"-o={outpath}"],
             check=True,
