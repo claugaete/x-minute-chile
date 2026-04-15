@@ -3,14 +3,18 @@ from abc import ABC, abstractmethod
 import json
 from pathlib import Path
 import re
+from typing import Callable
 import zipfile
 
 from bs4 import BeautifulSoup
 import geopandas as gpd
+import numpy as np
 import pandas as pd
 import requests
+from sklearn.cluster import DBSCAN
 from tqdm import tqdm
 
+import xmin
 from xmin.dataset.download import download_file, makedir
 from xmin.dataset.gtfs import clean_gtfs_frequencies, clean_gtfs_shapes
 
@@ -21,7 +25,7 @@ PROCESSED_DATA_PATH = DATA_PATH / "processed"
 
 
 def unzip(zip_path: Path, out_dir: Path):
-    """Extrae un ZIP en `zip_path` a la carpeta `out_dir`."""
+    """Extrae un ZIP desde `zip_path` a la carpeta `out_dir`."""
     with zipfile.ZipFile(zip_path, "r") as zip_ref:
         zip_ref.extractall(out_dir)
 
@@ -322,9 +326,7 @@ class MakeFarmacias(MakeDataset):
             }
         )
 
-        gpkg_path = (
-            PROCESSED_DATA_PATH / "amenities" / "farmacias" / "farmacias.gpkg"
-        )
+        gpkg_path = PROCESSED_DATA_PATH / "amenities" / "farmacias.gpkg"
         makedir(gpkg_path, is_file=True)
         farmacias_gdf.to_file(gpkg_path)
 
@@ -351,7 +353,7 @@ class MakeSalud(MakeDataset):
     def clean(self):
         print("Extrayendo ZIP...")
         interim_path = INTERIM_DATA_PATH / "amenities" / "salud"
-        dest_path = PROCESSED_DATA_PATH / "amenities" / "salud"
+        dest_path = PROCESSED_DATA_PATH / "amenities"
         unzip(self.zip_path, interim_path)
 
         print("Creando archivo GeoPackage...")
@@ -363,7 +365,119 @@ class MakeSalud(MakeDataset):
         salud_gdf["F_INICIO"] = pd.to_datetime(salud_gdf["F_INICIO"])
 
         makedir(dest_path)
-        salud_gdf.to_file(dest_path / "establecimientos_salud.gpkg")
+        salud_gdf.to_file(dest_path / "salud.gpkg")
+
+
+class MakeEducacion(MakeDataset):
+    """
+    Descarga y limpia datasets de establecimientos educacionales en Chile,
+    descargando datos proporcionados por el Ministerio de Educación a través
+    del Geoportal IDE. Se cuenta con los siguientes datasets:
+
+    - Establecimientos de educación parvularia, año 2021:
+      https://geoportal.cl/geoportal/catalog/35553/Establecimientos%20Educaci%C3%B3n%20Parvularia.
+    - Establecimientos de educación escolar, año 2021:
+      https://geoportal.cl/geoportal/catalog/35408/Establecimientos%20Educaci%C3%B3n%20Escolar.
+    - Establecimientos de educación superior, año 2020:
+      https://geoportal.cl/geoportal/catalog/35554/Establecimientos%20de%20Educaci%C3%B3n%20Superior.
+    """
+
+    name = "educacion"
+
+    def zip_path(self, name):
+        """Ruta del ZIP para cada dataset de educación."""
+        return (
+            RAW_DATA_PATH / "amenities" / "educacion" / "{}.zip".format(name)
+        )
+
+    def _clean_parvularia(self, gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+        gdf["id"] = gdf.index
+        return gdf.rename(columns={"NOM_ESTAB": "name"}).drop(columns="AGNO")
+
+    def _clean_escolar(self, gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+        return gdf.rename(columns={"RBD": "id", "NOM_RBD": "name"}).drop(
+            columns="AGNO"
+        )
+
+    def _clean_superior(self, gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+        """
+        Agrupa edificios cercanos que pertenecen a la misma universidad,
+        reduciendo sus pesos para no considerarlos como distintas universidades
+        sino que como una sola universidad con varias "entradas".
+        """
+
+        gdf = gdf.assign(
+            name=gdf["NOMBRE_INS"] + " - " + gdf["NOMBRE_INM"],
+            id=gdf.index,
+        ).drop(columns="AÑO")
+        gdf_proj = gdf.to_crs(xmin.projected_crs)
+
+        # guardamos índices y sus clusters, ordenados por universidad
+        all_indices = []
+        all_labels = []
+
+        for _, group in gdf_proj.groupby("COD_INST"):
+            if len(group) == 1:
+                labels = [0]
+            else:
+                # obtenemos coordenadas de edificios
+                coords = np.array(
+                    [[geom.x, geom.y] for geom in group.geometry]
+                )
+
+                # DBSCAN clustering
+                labels = DBSCAN(
+                    eps=500, min_samples=1, metric="euclidean"
+                ).fit_predict(coords)
+
+            all_indices.extend(group.index)
+            all_labels.extend(labels)
+
+        # asignamos cluster a cada edificio en el gdf
+        label_series = pd.Series(all_labels, index=all_indices)
+        gdf["_cluster"] = (
+            gdf["COD_INST"].astype(str) + "__" + label_series.astype(str)
+        )
+        cluster_sizes = gdf["_cluster"].map(gdf["_cluster"].value_counts())
+        gdf["weight"] = 1 / cluster_sizes
+
+        return gdf.drop(columns="_cluster")
+
+    def download(self):
+        urls = {
+            "parvularia": "https://www.geoportal.cl/geoportal/catalog/download/b52e4229-365e-3163-b211-679cc6b2fd99",
+            "escolar": "https://www.geoportal.cl/geoportal/catalog/download/d6bf9431-3282-3738-bd69-baf0d1ad63ec",
+            "superior": "https://www.geoportal.cl/geoportal/catalog/download/0dde8427-113a-356a-bace-ed4d51ddcb05",
+        }
+        for name, url in tqdm(urls.items()):
+            download_file(url, self.zip_path(name), leave=False)
+
+    def clean(self):
+        filenames = {
+            "parvularia": "layer_establecimientos_educacion_parvularia_20220309024143.shp",
+            "escolar": "layer_establecimientos_educacion_escolar_20220309024120.shp",
+            "superior": "layer_establecimientos_de_educacion_superior_20220309024111.shp",
+        }
+        clean_functions: dict[
+            str, Callable[[gpd.GeoDataFrame], gpd.GeoDataFrame]
+        ] = {
+            "parvularia": self._clean_parvularia,
+            "escolar": self._clean_escolar,
+            "superior": self._clean_superior,
+        }
+        interim_path = INTERIM_DATA_PATH / "amenities" / "educacion"
+        gpkg_path = PROCESSED_DATA_PATH / "amenities" / "educacion.gpkg"
+
+        print("Extrayendo ZIPs...")
+        for name in filenames.keys():
+            unzip(self.zip_path(name), interim_path)
+
+        print("Creando archivo GeoPackage...")
+        makedir(gpkg_path, is_file=True)
+        for name, clean in clean_functions.items():
+            gdf = _clean_ide_dataset_numbers(interim_path / filenames[name])
+            cleaned_gdf = clean(gdf)
+            cleaned_gdf.to_file(gpkg_path, layer=name, driver="GPKG")
 
 
 if __name__ == "__main__":
@@ -373,6 +487,7 @@ if __name__ == "__main__":
     make_gtfs_regional = MakeGtfsRegional()
     make_salud = MakeSalud()
     make_farmacias = MakeFarmacias()
+    make_educacion = MakeEducacion()
 
     all_datasets: list[MakeDataset] = [
         make_osm,
@@ -381,6 +496,7 @@ if __name__ == "__main__":
         make_gtfs_regional,
         make_salud,
         make_farmacias,
+        make_educacion,
     ]
 
     # datasets que reciben actualizaciones frecuentes (para evitar descargar
