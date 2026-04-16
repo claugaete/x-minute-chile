@@ -19,15 +19,17 @@ def clean_parks(
     """
     Dado un GeoDataFrame con parques (o cualquier otro polígono que se desee
     convertir a puntos), se convierte cada geometría a una serie de puntos
-    representativos, cada uno con un "peso" inversamente proporcional al número
-    de puntos que generó cada polígono. Es decir, si a partir de un polígono se
-    obtuvieron 10 puntos, cada punto tendrá un peso 0.1. Los puntos
-    representativos se obtienen mediante la función
+    representativos. Estos puntos se obtienen mediante la función
     `geometry.convert_polygon_to_representative_points`, considerando como
     puntos de entrada la intersección entre el borde del polígono y
     `pedestrian_network`, y solamente agregando puntos intermedios si
     `is_fenced_column` es falso para el polígono en cuestión, o si no hay
     intersección entre el polígono y `pedestrian_network`.
+    
+    El peso asignado a cada punto es la razón entre el área del polígono que
+    representa, y la cantidad de puntos que representan a ese polígono. Es
+    decir, si a partir de un polígono de área 5000 se obtuvieron 10 puntos,
+    cada punto tendrá un peso 5000/10 = 500.
 
     Parameters
     ---
@@ -58,7 +60,8 @@ def clean_parks(
             parks_gdf.index
             if index_column is None
             else parks_gdf[index_column]
-        )
+        ),
+        area=lambda gdf: gdf.area
     )
 
     pedestrian_network = pedestrian_network.to_crs(xmin.projected_crs)
@@ -111,6 +114,7 @@ def clean_parks(
                 [row] * len(representative_points), crs=xmin.projected_crs
             )
             result = result.set_geometry(representative_points)
+            result["weight"] = result["area"] / len(result)
             results.append(result)
 
     points_gdf = gpd.GeoDataFrame(
@@ -119,6 +123,5 @@ def clean_parks(
     points_gdf["n_points"] = points_gdf["park_id"].map(
         points_gdf["park_id"].value_counts()
     )
-    points_gdf["weight"] = 1 / points_gdf["n_points"]
 
-    return points_gdf.drop(columns="n_points").to_crs(4326)
+    return points_gdf.to_crs(4326)
