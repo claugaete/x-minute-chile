@@ -5,6 +5,7 @@ import tempfile
 
 from shapely.geometry import MultiPolygon, Polygon
 
+import xmin
 from xmin.dataset.download import makedir
 
 
@@ -50,11 +51,16 @@ def shapely_to_osmosis_polygon(
 
 
 def extract_osm_subset(
-    inpath: str | Path, outpath: str | Path, bounds: Polygon | MultiPolygon
+    inpath: str | Path,
+    outpath: str | Path,
+    bounds: Polygon | MultiPolygon,
+    clip: bool = True,
 ):
     """
     Extrae una porción de un archivo PBF utilizando osmconvert. Requiere que
-    osmconvert esté instalado en el sistema.
+    osmconvert esté instalado en el sistema; si osmconvert no está en el PATH,
+    se debe modificar la variable `xmin.osmconvert_path` a la ruta del
+    ejecutable.
 
     Parameters
     ---
@@ -64,6 +70,9 @@ def extract_osm_subset(
         Ruta al archivo PBF de salida.
     bounds : Polygon or MultiPolygon
         Polígono con la porción a extraer.
+    clip : bool, default: True
+        Decide si cortar o no las áreas/líneas que estén parcialmente
+        contenidas en `bounds`.
     """
 
     # write bounds to temporary .poly file and use osmconvert
@@ -71,8 +80,16 @@ def extract_osm_subset(
         tmp.write(shapely_to_osmosis_polygon(bounds))
         tmp.flush()
         makedir(Path(outpath), is_file=True)
+        args = [
+            xmin.osmconvert_path,
+            inpath,
+            f"-B={tmp.name}",
+            f"-o={outpath}",
+        ]
+        if not clip:
+            args.append("--complete-ways")
         subprocess.run(
-            ["osmconvert", inpath, f"-B={tmp.name}", f"-o={outpath}"],
+            args,
             check=True,
             capture_output=True,
             text=True,
