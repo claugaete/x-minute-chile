@@ -15,8 +15,18 @@ PYTHON_INTERPRETER = python
 .PHONY: requirements
 requirements:
 	uv sync
-	
 
+
+## Download and clean all datasets
+.PHONY: dataset_all
+dataset_all:
+	uv run scripts/make_dataset.py all
+
+
+## Download and clean frequently updated datasets
+.PHONY: dataset_update
+dataset_update:
+	uv run scripts/make_dataset.py update
 
 
 ## Delete all compiled Python files

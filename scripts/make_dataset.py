@@ -1,5 +1,6 @@
 # script para descargar datos de Chile (actualizados)
 from abc import ABC, abstractmethod
+import argparse
 import json
 from pathlib import Path
 import re
@@ -619,6 +620,7 @@ class MakeAreasVerdes(MakeDataset):
         # split parks and plazas, and save
         print("Creando archivo GeoPackage...")
         gpkg_path = PROCESSED_DATA_PATH / "amenities" / "areas_verdes.gpkg"
+        makedir(gpkg_path, is_file=True)
         parks_gdf = points_gdf[points_gdf["TIPO_EP"] == "PARQUE"]
         plazas_gdf = points_gdf[points_gdf["TIPO_EP"] == "PLAZA"]
         parks_gdf.to_file(gpkg_path, layer="parques", driver="GPKG")
@@ -626,6 +628,7 @@ class MakeAreasVerdes(MakeDataset):
 
 
 if __name__ == "__main__":
+
     make_osm = MakeOsm()
     make_censo = MakeCenso()
     make_gtfs_santiago = MakeGtfsSantiago()
@@ -654,6 +657,56 @@ if __name__ == "__main__":
         make_farmacias,
     ]
 
-    for dataset in all_datasets:
+    options = "\n".join(
+        [
+            "- all: todos los datasets",
+            "- update: todos los datasets que reciben actualizaciones "
+            "frecuentes",
+        ]
+        + [f"- {dataset.name}" for dataset in all_datasets]
+    )
+
+    parser = argparse.ArgumentParser(
+        description="Descarga y/o limpia los datasets solicitados."
+    )
+
+    parser.add_argument(
+        "dataset",
+        type=str,
+        help="Nombre del dataset a procesar. Opciones:\n" + options,
+    )
+    parser.add_argument(
+        "--download",
+        action="store_true",
+        help="Solo descargar el dataset solicitado.",
+    )
+    parser.add_argument(
+        "--clean",
+        action="store_true",
+        help="Solo limpiar el dataset solicitado.",
+    )
+
+    args = parser.parse_args()
+
+    if args.dataset == "all":
+        datasets_to_process = all_datasets
+    elif args.dataset == "update":
+        datasets_to_process = updated_datasets
+    else:
+        datasets_to_process = [
+            dataset for dataset in all_datasets if dataset.name == args.dataset
+        ]
+        if not datasets_to_process:
+            raise ValueError(
+                "El dataset solicitado no existe, por favor solicitar un "
+                "dataset entre las opciones:\n" + options
+            )
+
+    for dataset in datasets_to_process:
         print(f"\n--- {dataset.name.upper()} ---")
-        dataset.download_and_clean()
+        if not args.download and not args.clean:
+            dataset.download_and_clean()
+        if args.download:
+            dataset.download()
+        if args.clean:
+            dataset.clean()
