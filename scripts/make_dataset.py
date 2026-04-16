@@ -10,6 +10,8 @@ from bs4 import BeautifulSoup
 import geopandas as gpd
 import numpy as np
 import pandas as pd
+import quackosm as qosm
+import rarfile
 import requests
 from sklearn.cluster import DBSCAN
 from tqdm import tqdm
@@ -17,6 +19,7 @@ from tqdm import tqdm
 import xmin
 from xmin.dataset.download import download_file, makedir
 from xmin.dataset.gtfs import clean_gtfs_frequencies, clean_gtfs_shapes
+from xmin.dataset.parks import clean_parks
 
 DATA_PATH = Path(__file__).parent.resolve() / ".." / "data"
 RAW_DATA_PATH = DATA_PATH / "raw"
@@ -28,6 +31,30 @@ def unzip(zip_path: Path, out_dir: Path):
     """Extrae un ZIP desde `zip_path` a la carpeta `out_dir`."""
     with zipfile.ZipFile(zip_path, "r") as zip_ref:
         zip_ref.extractall(out_dir)
+
+
+def unrar(rar_path: Path, out_dir: Path):
+    """Extrae un RAR desde `rar_path` a la carpeta `out_dir`, permitiendo
+    manejar errores si no se logra extrar automáticamente."""
+    try:
+        with rarfile.RarFile(rar_path, "r") as rar_ref:
+            rar_ref.extractall(out_dir)
+    except rarfile.RarCannotExec:
+        failed_unrar_choice = ""
+        while failed_unrar_choice not in ("1", "2"):
+            failed_unrar_choice = input(
+                "rarfile requiere que `unrar` o `unar` se encuentre en el "
+                "PATH.\n"
+                "(1) Ya agregué la herramienta al PATH y quiero intentar la "
+                "extracción automática nuevamente.\n"
+                f"(2) Ya extraí manualmente el RAR a {out_dir} y quiero "
+                "continuar.\n"
+                "Opción escogida (1 o 2): "
+            )
+        if failed_unrar_choice == "1":
+            unrar(rar_path, out_dir)
+        else:
+            return
 
 
 def _clean_ide_dataset_numbers(
@@ -380,9 +407,20 @@ class MakeEducacion(MakeDataset):
       https://geoportal.cl/geoportal/catalog/35408/Establecimientos%20Educaci%C3%B3n%20Escolar.
     - Establecimientos de educación superior, año 2020:
       https://geoportal.cl/geoportal/catalog/35554/Establecimientos%20de%20Educaci%C3%B3n%20Superior.
+
+    Parameters
+    ---
+    cluster_min_eps : float, default: 500
+        Distancia utilizada como `min_eps` en el algoritmo de clustering DBSCAN
+        para agrupar edificios cercanos de una misma universidad bajo el mismo
+        "campus".
     """
 
     name = "educacion"
+
+    def __init__(self, cluster_min_eps: float = 500):
+        super().__init__()
+        self.cluster_min_eps = cluster_min_eps
 
     def zip_path(self, name):
         """Ruta del ZIP para cada dataset de educación."""
@@ -427,7 +465,7 @@ class MakeEducacion(MakeDataset):
 
                 # DBSCAN clustering
                 labels = DBSCAN(
-                    eps=500, min_samples=1, metric="euclidean"
+                    eps=self.cluster_min_eps, min_samples=1, metric="euclidean"
                 ).fit_predict(coords)
 
             all_indices.extend(group.index)
@@ -480,6 +518,113 @@ class MakeEducacion(MakeDataset):
             cleaned_gdf.to_file(gpkg_path, layer=name, driver="GPKG")
 
 
+class MakeAreasVerdes(MakeDataset):
+    """
+    Descarga y limpia datos de áreas verdes urbanas (plazas y parques), según
+    la cartografía de Indicadores de Calidad de Plazas y Parques Urbanos, del
+    Instituto Nacional de Estadísticas (2019): https://arcg.is/1LTLCf
+
+    La limpieza involucra convertir los polígonos que representan a las
+    distintas plazas y parques en puntos. Si `n` puntos pertenecen a la misma
+    área verde (igual nombre y comuna), entonces cada punto tendrá un peso
+    `1/n` en su columna `weight`. Si un área verde no tiene nombre, se
+    considera por sí sola (no se combina con otras áreas verdes aledañas, pues
+    no hay manera de saber si pertenecen al mismo complejo o no). Para evitar
+    que un área con muchas áreas verdes pequeñas sin nombre tenga una
+    accesibilidad excesivamente alta, se recomienda ponderar cada punto por el
+    tamaño del área verde correspondiente, y/o eliminar las áreas verdes sin
+    nombre.
+
+    Parameters
+    ---
+    min_dist : float, default: 200
+        Distancia mínima (en metros) que deben tener dos puntos representativos
+        de una misma área verde.
+    """
+
+    name = "areas-verdes"
+    rar_path = RAW_DATA_PATH / "amenities" / "verdes" / "verdes.rar"
+
+    def __init__(self, min_dist: float = 200):
+        super().__init__()
+        self.min_dist = min_dist
+
+    def download(self):
+        download_file(
+            "https://geoarchivos.ine.cl/Files/Calidad_PlPq/SHP.rar",
+            self.rar_path,
+        )
+
+    def clean(self):
+        print("Extrayendo RAR...")
+        inter_dir = INTERIM_DATA_PATH / "amenities" / "verdes"
+        unrar(self.rar_path, inter_dir)
+
+        print("Leyendo GeoDataFrames...")
+        verdes_g1g2 = gpd.read_file(
+            inter_dir / "CALIDAD_pzpq_2019_G1G2.shp"
+        ).to_crs(4326)
+        verdes_g3g4 = gpd.read_file(inter_dir / "PZPQ_2018_G3G4.shp").to_crs(
+            4326
+        )
+        verdes_gdf = gpd.GeoDataFrame(
+            pd.concat([verdes_g1g2, verdes_g3g4], ignore_index=True), crs=4326
+        )
+        verdes_gdf["fenced"] = verdes_gdf["Cierres"].isin(
+            ["Con_cierre_perim_gratuito", "Con_cierre_perim_pagado"]
+        )
+        verdes_gdf["name"] = (
+            verdes_gdf["TIPO_EP"]
+            + " "
+            + verdes_gdf["NOMBRE_EP"].fillna(
+                verdes_gdf.index.to_series().astype(str)
+            )
+            + " "
+            + verdes_gdf["COMUNA"]
+        )
+
+        # use quackosm to extract roads intersecting parks
+        print("Obteniendo rutas al interior de áreas verdes...")
+        chile_pbf_path = RAW_DATA_PATH / "osm" / "Chile.osm.pbf"
+        verdes_union = verdes_gdf.union_all()
+        roads_gdf = qosm.convert_pbf_to_geodataframe(
+            pbf_path=chile_pbf_path,
+            tags_filter={
+                "highway": [
+                    "footway",
+                    "path",
+                    "pedestrian",
+                    "steps",
+                    "living_street",
+                    "residential",
+                    "service",
+                ]
+            },
+            working_directory=xmin.quackosm_working_directory,
+            geometry_filter=verdes_union,
+            keep_all_tags=False,
+        )
+
+        # assign representative points
+        print("Asignando puntos representativos a áreas verdes...")
+        points_gdf = clean_parks(
+            verdes_gdf,
+            roads_gdf,
+            is_fenced_column="fenced",
+            index_column="name",
+            min_dist=self.min_dist,
+        )
+        points_gdf = points_gdf.assign(id=points_gdf.index)
+
+        # split parks and plazas, and save
+        print("Creando archivo GeoPackage...")
+        gpkg_path = PROCESSED_DATA_PATH / "amenities" / "areas_verdes.gpkg"
+        parks_gdf = points_gdf[points_gdf["TIPO_EP"] == "PARQUE"]
+        plazas_gdf = points_gdf[points_gdf["TIPO_EP"] == "PLAZA"]
+        parks_gdf.to_file(gpkg_path, layer="parques", driver="GPKG")
+        plazas_gdf.to_file(gpkg_path, layer="plazas", driver="GPKG")
+
+
 if __name__ == "__main__":
     make_osm = MakeOsm()
     make_censo = MakeCenso()
@@ -488,6 +633,7 @@ if __name__ == "__main__":
     make_salud = MakeSalud()
     make_farmacias = MakeFarmacias()
     make_educacion = MakeEducacion()
+    make_areas_verdes = MakeAreasVerdes()
 
     all_datasets: list[MakeDataset] = [
         make_osm,
@@ -497,6 +643,7 @@ if __name__ == "__main__":
         make_salud,
         make_farmacias,
         make_educacion,
+        make_areas_verdes,
     ]
 
     # datasets que reciben actualizaciones frecuentes (para evitar descargar
