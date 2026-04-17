@@ -10,6 +10,7 @@ import pandas as pd
 import r5py
 from tqdm import tqdm
 
+import xmin
 from xmin.amenities import Amenity
 from xmin.geometry import to_centroids
 from xmin.origins import Origins
@@ -272,6 +273,82 @@ class TravelTimeMatrices:
         }
 
         return cls(origins, matrices)
+
+    def group_amenity_destinations(
+        self, amenity: Amenity, group_col: str
+    ) -> Amenity:
+        """
+        Agrupa destinos dentro de una necesidad según la columna `group_col`,
+        considerando el menor tiempo de viaje dentro de los destinos
+        individuales como el tiempo de viaje al destino agrupado (para cada
+        origen). Modifica el objeto `TravelTimeMatrices`, quitando la matriz de
+        `amenity` y reemplazándola por la nueva matriz agrupada, la cual asigna
+        a un nuevo objeto `Amenity`.
+
+        Retorna el nuevo objeto `Amenity`, que es utilizado como llave para
+        acceder a la nueva matriz. El peso de los destinos en el `Amenity`
+        agrupado es la suma de los pesos originales que fueron asignados al
+        destino; la geometría de cada nuevo destino es el centroide de los
+        destinos originales.
+
+        Parameters
+        ---
+        amenity : Amenity
+            Necesidad cuyos destinos se buscan agrupar. Esta necesidad será
+            eliminada de las llaves de `TravelTimeMatrices.matrices` y será
+            reemplazada por una nueva necesidad (retornada por el método).
+        group_col : str
+            Columna de `amenity.amenity_gdf` que será utilizada para agrupar
+            los destinos.
+
+        Returns
+        ---
+        El nuevo objeto `Amenity`, que es utilizado como llave en
+        `TravelTimeMatrices.matrices` para acceder a la nueva matriz creada.
+        """
+
+        if amenity not in self.matrices.keys():
+            raise ValueError(
+                f"{amenity} no está en el objeto TravelTimeMatrices."
+            )
+
+        assigned_ttm = self.matrices[amenity].merge(
+            amenity.amenity_gdf[["id", group_col]],
+            left_on="to_id",
+            right_on="id",
+        )
+        grouped_ttm = (
+            assigned_ttm.groupby(["from_id", group_col])["travel_time"]
+            .min()
+            .reset_index()
+            .rename(columns={group_col: "to_id"})
+        ).assign(to_id=lambda df: amenity.name + "/" + df["to_id"])
+        grouped_gdf = (
+            gpd.GeoDataFrame(
+                amenity.amenity_gdf.groupby([group_col])[
+                    ["weight", "geometry"]
+                ].agg(
+                    {
+                        "weight": "sum",
+                        "geometry": lambda geoms: geoms.to_crs(
+                            xmin.projected_crs
+                        )
+                        .union_all()
+                        .centroid,
+                    }
+                ),
+                crs=xmin.projected_crs,
+            )
+            .to_crs(4326)
+            .reset_index()
+            .rename(columns={group_col: "id"})
+        )
+        grouped_gdf["name"] = grouped_gdf["id"]
+        new_amenity = Amenity(amenity.name, grouped_gdf)
+        self._matrices[new_amenity] = grouped_ttm
+        self._matrices.pop(amenity)
+
+        return new_amenity
 
     @property
     def origins(self) -> Origins:
