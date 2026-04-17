@@ -8,7 +8,7 @@ import geopandas as gpd
 import numpy as np
 import pandas as pd
 import r5py
-from tqdm import tqdm
+from tqdm.auto import tqdm
 
 import xmin
 from xmin.amenities import Amenity

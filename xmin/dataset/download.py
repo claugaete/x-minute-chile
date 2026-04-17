@@ -4,7 +4,7 @@ import warnings
 
 from dateutil.parser import parse as parsedate
 import requests
-from tqdm import tqdm
+from tqdm.auto import tqdm
 
 
 def makedir(path: Path, is_file: bool = False) -> None:

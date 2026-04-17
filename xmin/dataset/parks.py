@@ -2,7 +2,7 @@ import geopandas as gpd
 import pandas as pd
 from shapely import MultiPoint, MultiPolygon, Point, Polygon
 from shapely.geometry.base import BaseGeometry
-from tqdm import tqdm
+from tqdm.auto import tqdm
 
 import xmin
 from xmin.geometry import convert_polygon_to_representative_points

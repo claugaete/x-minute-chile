@@ -15,7 +15,7 @@ import quackosm as qosm
 import rarfile
 import requests
 from sklearn.cluster import DBSCAN
-from tqdm import tqdm
+from tqdm.auto import tqdm
 
 import xmin
 from xmin.dataset.download import download_file, makedir

@@ -3,7 +3,7 @@ import warnings
 import geopandas as gpd
 import pandas as pd
 from shapely.geometry.base import BaseGeometry
-from tqdm import tqdm
+from tqdm.auto import tqdm
 
 from xmin.amenities import Amenity
 from xmin.geometry import to_centroids
