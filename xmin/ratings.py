@@ -9,6 +9,7 @@ from xmin.amenities import Amenity
 from xmin.geometry import to_centroids
 from xmin.indices import IndexFunction
 from xmin.origins import Origins
+from xmin.visualization import AccessibilityVisualizer
 
 
 class AccessibilityRatings:
@@ -39,6 +40,7 @@ class AccessibilityRatings:
         self._origins = origins
         self._weights = weights
         self._gdf = gdf
+        self._visualize = AccessibilityVisualizer(self._gdf, self._origins)
 
     @property
     def origins(self) -> Origins:
@@ -54,6 +56,11 @@ class AccessibilityRatings:
     def gdf(self) -> gpd.GeoDataFrame:
         """GeoDataFrame con los ratings de accesibilidad calculados."""
         return self._gdf
+
+    @property
+    def visualize(self) -> AccessibilityVisualizer:
+        """Módulo con distintas opciones de visualización para los ratings."""
+        return self._visualize
 
     @classmethod
     def compute(
