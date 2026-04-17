@@ -58,6 +58,53 @@ class BinaryIndex(IndexFunction):
         )
 
 
+class NexiGlobal(IndexFunction):
+    """
+    Índice NEXI-Global, inspirado en la definición de Olivari et. al [1]_. Para
+    cada origen, asigna un valor de 1 si el destino más accesible está a menos
+    de `best_time` minutos, un valor de 0 si el destino más accesible está a
+    más de `worst_time` minutos, y valores intermedios (interpolados
+    linealmente) si el destino más accesible está entre `best_time` y
+    `worst_time` minutos.
+
+    Parameters
+    ---
+    best_time : float
+        Tiempo de viaje para el cual se obtiene un rating del 100%.
+    worst_time : float or None, default: None
+        Tiempo de viaje para el cual se obtiene un rating del 0%. Si es nulo,
+        se asigna `worst_time = 2*best_time` por defecto.
+
+    References
+    ---
+    .. [1] Olivari, Beatrice, Piergiorgio Cipriano, Maurizio Napolitano y Luca
+        Giovannini: Are Italian cities already 15-minute? Presenting the Next
+        Proximity Index: A novel and scalable way to measure it, based on open
+        data. Journal of Urban Mobility, 4:100057, 2023, ISSN 2667-0917.
+        https://doi.org/10.1016/j.urbmob.2023.100057
+    """
+
+    def __init__(self, best_time: float, worst_time: float | None = None):
+        self.best_time = best_time
+        self.worst_time = 2 * best_time if worst_time is None else worst_time
+
+    def calculate_index(
+        self,
+        travel_times: pd.DataFrame,
+        population: pd.Series,
+        amenity_weights: pd.Series,
+    ) -> pd.Series:
+        best_time = (
+            travel_times.set_index("to_id")
+            .groupby("from_id")["travel_time"]
+            .min()
+        )
+        index_not_clipped = (self.worst_time - best_time) / (
+            self.worst_time - self.best_time
+        )
+        return index_not_clipped.clip(0, 1)
+
+
 class TwoStepFca(IndexFunction):
     """
     Índice del tipo 2-step floating catchment area (2SFCA) [1]_. Calcula una
