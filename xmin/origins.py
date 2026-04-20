@@ -1,7 +1,8 @@
 import geopandas as gpd
+from tobler.area_weighted import area_interpolate
 from tobler.util import h3fy
 
-from xmin.geometry import overlay_column
+import xmin
 
 
 class Origins:
@@ -81,10 +82,9 @@ class Origins:
                     "`population_gdf` debe tener al menos las columnas "
                     "`population` y `geometry`"
                 )
-            h3_grid["population"] = overlay_column(
-                h3_grid, population_gdf, "population"
-            )
-        h3_grid = h3_grid.rename_axis("id").reset_index()
+            h3_grid = area_interpolate(
+                population_gdf.to_crs(xmin.projected_crs), h3_grid.to_crs(xmin.projected_crs), extensive_variables=["population"]
+            ).to_crs(4326).rename_axis("id").reset_index()
 
         return cls(regions, h3_resolution, h3_grid)
 
