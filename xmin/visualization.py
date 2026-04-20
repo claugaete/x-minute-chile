@@ -205,7 +205,7 @@ class AccessibilityVisualizer:
         kwargs
             Argumentos que serán pasados a `GeoDataFrame.plot()` (si
             `interactive=False`) o `GeoDataFrame.explore()` (si
-            `interactive=True`) al momento de graficar la grilla de origenes
+            `interactive=True`) al momento de graficar la grilla de orígenes
             con los valores de `column`.
         """
 
@@ -218,3 +218,47 @@ class AccessibilityVisualizer:
             overlay_cfg,
             **kwargs,
         )
+
+    def nexi_discomfort(
+        self,
+        column: str,
+        interactive: bool = False,
+        overlay_cfg: OverlayConfig = OverlayConfig(),
+        **kwargs,
+    ):
+        """
+        Visualización de NEXI-Discomfort, según la definición de Olivari et. al
+        [1]_. Dado un origen con un rating de accesibilidad `R` y una población
+        `P`, se define el índice NEXI-Discomfort como `(1-R)*P`. Esto entrega
+        un mayor valor a zonas muy pobladas que tienen mala accesibilidad.
+
+        Parameters
+        ---
+        column : str
+            Columna que se desea utilizar como rating base `R` de
+            NEXI-Discomfort.
+        interactive : bool, default: False
+            Si la visualización será interactiva (mapa) o estática (gráfico).
+        overlay_cfg : OverlayConfig, default: OverlayConfig()
+            Configuración de capas adicionales. Ver `OverlayConfig`.
+        kwargs
+            Argumentos que serán pasados a `GeoDataFrame.plot()` (si
+            `interactive=False`) o `GeoDataFrame.explore()` (si
+            `interactive=True`) al momento de graficar la grilla de orígenes
+            con los valores de `column`.
+
+        References
+        ---
+        .. [1] Olivari, Beatrice, Piergiorgio Cipriano, Maurizio Napolitano y
+            Luca Giovannini: Are Italian cities already 15-minute? Presenting
+            the Next Proximity Index: A novel and scalable way to measure it,
+            based on open data. Journal of Urban Mobility, 4:100057, 2023, ISSN
+            2667-0917. https://doi.org/10.1016/j.urbmob.2023.100057
+        """
+
+        discomfort = (1 - self.gdf[column]) * self.origins.h3_grid.set_index(
+            "id"
+        )["population"]
+        discomfort = discomfort.rename("discomfort")
+
+        return self.choropleth(discomfort, interactive, overlay_cfg, **kwargs)
