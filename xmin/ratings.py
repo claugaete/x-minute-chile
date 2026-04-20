@@ -40,7 +40,9 @@ class AccessibilityRatings:
         self._origins = origins
         self._weights = weights
         self._gdf = gdf
-        self._visualize = AccessibilityVisualizer(self._gdf, self._origins)
+        self._visualize = AccessibilityVisualizer(
+            self._gdf, self._origins, [amenity for amenity in weights.keys()]
+        )
 
     @property
     def origins(self) -> Origins:

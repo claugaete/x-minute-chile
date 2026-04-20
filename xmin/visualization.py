@@ -9,6 +9,7 @@ import quackosm as qosm
 from shapely.geometry.base import BaseGeometry
 
 import xmin
+from xmin.amenities import Amenity
 from xmin.origins import Origins
 
 
@@ -21,11 +22,18 @@ class OverlayConfig:
     ---
     show_borders : bool, default: True
         Si se mostrarán las fronteras de las regiones del análisis.
+    show_amenities : bool | list[Amenity], default: False
+        Si se mostrarán los destinos asociados a las distintas necesidades
+        consideradas. Si se recibe una lista de objetos Amenity, se mostrarán
+        los destinos asociados a esos objetos.
     show_roads : bool, default: False
         Si se mostrarán caminos para contextualizar la región de análisis.
     borders_kwds : dict, default: {}
         Diccionario de argumentos que serán pasados al momento de graficar las
         fronteras.
+    amenities_kwds : dict, default: {}
+        Diccionario de argumentos que serán pasados al momento de graficar las
+        necesidades.
     roads_kwds : dict, default: {}
         Diccionario de argumentos que serán pasados al momento de graficar los
         caminos.
@@ -40,8 +48,10 @@ class OverlayConfig:
     """
 
     show_borders: bool = True
+    show_amenities: bool | list[Amenity] = False
     show_roads: bool = False
     borders_kwds: dict = field(default_factory=dict)
+    amenities_kwds: dict = field(default_factory=dict)
     roads_kwds: dict = field(default_factory=dict)
     roads_gdf: gpd.GeoDataFrame | None = None
     roads_pbf_path: Path | str | None = None
@@ -58,14 +68,21 @@ class AccessibilityVisualizer:
         GeoDataFrame con los ratings del área a analizar.
     origins : Origins
         Orígenes representando el área a analizar.
+    amenities : list[Amenity]
+        Lista de necesidades consideradas en el análisis.
     """
 
-    def __init__(self, gdf: gpd.GeoDataFrame, origins: Origins):
+    def __init__(
+        self, gdf: gpd.GeoDataFrame, origins: Origins, amenities: list[Amenity]
+    ):
         self.gdf = gdf
         self.origins = origins
+        self.amenities = amenities
 
     @staticmethod
-    def _get_roads(roads_pbf_path: Path | str, bounds: BaseGeometry):
+    def _get_roads(
+        roads_pbf_path: Path | str, bounds: BaseGeometry
+    ) -> gpd.GeoDataFrame:
         """Obtener caminos principales a graficar mediante QuackOSM."""
         roads_gdf = qosm.convert_pbf_to_geodataframe(
             pbf_path=roads_pbf_path,
@@ -83,6 +100,28 @@ class AccessibilityVisualizer:
             keep_all_tags=False,
         )
         return roads_gdf.clip(bounds)
+
+    @staticmethod
+    def _get_destinations(amenities: list[Amenity]) -> gpd.GeoDataFrame:
+        """Obtener destinos a partir de un conjunto de necesidades."""
+        return gpd.GeoDataFrame(
+            pd.concat(
+                [
+                    amenity.amenity_gdf[
+                        list(
+                            {
+                                "id",
+                                "name",
+                                "weight",
+                                "geometry",
+                            }.intersection(amenity.amenity_gdf.columns)
+                        )
+                    ].assign(category=amenity.name)
+                    for amenity in amenities
+                ]
+            ),
+            crs=4326,
+        )
 
     def _show(
         self,
@@ -107,6 +146,16 @@ class AccessibilityVisualizer:
             Argumentos que serán pasados al momento de graficar la grilla de
             origenes con los valores de `values`.
         """
+
+        if isinstance(overlay_cfg.show_amenities, list):
+            if overlay_cfg.amenities_kwds == []:
+                raise ValueError("`show_amenities` es una lista vacía.")
+            else:
+                amenities_to_plot = self._get_destinations(
+                    overlay_cfg.show_amenities
+                )
+        elif overlay_cfg.show_amenities:
+            amenities_to_plot = self._get_destinations(self.amenities)
 
         if overlay_cfg.show_roads and not overlay_cfg.roads_gdf:
             if overlay_cfg.roads_pbf_path:
@@ -140,6 +189,10 @@ class AccessibilityVisualizer:
                 self.origins.regions.explore(
                     m=m, **(default_overlay_kwds | overlay_cfg.borders_kwds)
                 )
+            if overlay_cfg.show_amenities:
+                amenities_to_plot.explore(
+                    "category", m=m, **overlay_cfg.amenities_kwds
+                )
             if overlay_cfg.show_roads:
                 roads_gdf.explore(
                     m=m, **(default_overlay_kwds | overlay_cfg.roads_kwds)
@@ -169,11 +222,21 @@ class AccessibilityVisualizer:
                 "linewidth": 0.5,
                 "zorder": -1,
             }
+            default_amenities_kwds = {
+                "markersize": 2,
+                "legend": True,
+            }
 
             ax = gdf_to_plot.plot(col_name, **(default_plot_kwds | kwargs))
             if overlay_cfg.show_borders:
                 self.origins.regions.plot(
                     ax=ax, **(default_borders_kwds | overlay_cfg.borders_kwds)
+                )
+            if overlay_cfg.show_amenities:
+                amenities_to_plot.plot(
+                    "category",
+                    ax=ax,
+                    **(default_amenities_kwds | overlay_cfg.amenities_kwds),
                 )
             if overlay_cfg.show_roads:
                 roads_gdf.plot(

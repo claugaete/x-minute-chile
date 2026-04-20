@@ -22,9 +22,16 @@ class Amenity:
     amenity_gdf : GeoDataFrame
         GeoDataFrame con los puntos que satisfacen la necesidad. Requiere al
         menos una columna `id` y una columna `geometry`; opcionalmente puede
-        tener una columna `weight` si se desea ponderar un punto por sobre otro
-        (si no existe esta columna, se asumirá un peso 1 para todos los
-        puntos). Si alguna geometría de la columna `geometry` no es del tipo
+        tener las siguientes columnas:
+        
+        - `weight` si se desea ponderar un punto por sobre otro
+            (si no existe esta columna, se asumirá un peso 1 para todos los
+            puntos).
+        - `name` si se desea asignar un nombre que sea considerado por algunos
+            métodos de visualización interactiva (que aparezca el nombre al
+            hacer "hover" por encima del punto).
+        
+        Si alguna geometría de la columna `geometry` no es del tipo
         `Point`, se lanzará una advertencia y se convertirá a `Point` usando su
         centroide.
     bounds : BaseGeometry or None, default: None
