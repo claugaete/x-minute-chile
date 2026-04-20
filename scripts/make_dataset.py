@@ -63,7 +63,10 @@ def _clean_ide_dataset_numbers(
     keep_as_float: list[str] = ["LATITUD", "LONGITUD"],
 ) -> gpd.GeoDataFrame:
     """
-    Lee un GeoDataFrame y cambia todas las columnas que son float a int, excepto latitud y longitud (que deberían mantenerse como float). Esto ocurre para los datasets descargados desde el Geoportal de IDE Chile (https://geoportal.cl/catalog).
+    Lee un GeoDataFrame y cambia todas las columnas que son float a int,
+    excepto latitud y longitud (que deberían mantenerse como float). Esto
+    ocurre para los datasets descargados desde el Geoportal de IDE Chile
+    (https://geoportal.cl/catalog).
 
     Parameters
     ---
