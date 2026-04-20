@@ -75,9 +75,9 @@ class AccessibilityVisualizer:
     def __init__(
         self, gdf: gpd.GeoDataFrame, origins: Origins, amenities: list[Amenity]
     ):
-        self.gdf = gdf
-        self.origins = origins
-        self.amenities = amenities
+        self._gdf = gdf
+        self._origins = origins
+        self._amenities = amenities
 
     @staticmethod
     def _get_roads(
@@ -155,13 +155,13 @@ class AccessibilityVisualizer:
                     overlay_cfg.show_amenities
                 )
         elif overlay_cfg.show_amenities:
-            amenities_to_plot = self._get_destinations(self.amenities)
+            amenities_to_plot = self._get_destinations(self._amenities)
 
         if overlay_cfg.show_roads and not overlay_cfg.roads_gdf:
             if overlay_cfg.roads_pbf_path:
                 roads_gdf = self._get_roads(
                     overlay_cfg.roads_pbf_path,
-                    self.origins.regions.union_all(),
+                    self._origins.regions.union_all(),
                 )
             else:
                 raise ValueError(
@@ -171,7 +171,7 @@ class AccessibilityVisualizer:
                 )
 
         col_name = values.name
-        gdf_to_plot = self.gdf.copy()
+        gdf_to_plot = self._gdf.copy()
         gdf_to_plot[col_name] = values
 
         if interactive:
@@ -186,7 +186,7 @@ class AccessibilityVisualizer:
                 col_name, **(default_explore_kwds | kwargs)
             )
             if overlay_cfg.show_borders:
-                self.origins.regions.explore(
+                self._origins.regions.explore(
                     m=m, **(default_overlay_kwds | overlay_cfg.borders_kwds)
                 )
             if overlay_cfg.show_amenities:
@@ -229,7 +229,7 @@ class AccessibilityVisualizer:
 
             ax = gdf_to_plot.plot(col_name, **(default_plot_kwds | kwargs))
             if overlay_cfg.show_borders:
-                self.origins.regions.plot(
+                self._origins.regions.plot(
                     ax=ax, **(default_borders_kwds | overlay_cfg.borders_kwds)
                 )
             if overlay_cfg.show_amenities:
@@ -273,7 +273,7 @@ class AccessibilityVisualizer:
         """
 
         if isinstance(column, str):
-            column = self.gdf[column]
+            column = self._gdf[column]
 
         return self._show(
             column,
@@ -319,7 +319,7 @@ class AccessibilityVisualizer:
             2667-0917. https://doi.org/10.1016/j.urbmob.2023.100057
         """
 
-        discomfort = (1 - self.gdf[column]) * self.origins.h3_grid.set_index(
+        discomfort = (1 - self._gdf[column]) * self._origins.h3_grid.set_index(
             "id"
         )["population"]
         discomfort = discomfort.rename("discomfort")
