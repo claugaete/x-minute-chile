@@ -392,7 +392,9 @@ class MakeSalud(MakeDataset):
             interim_path
             / "l_910_v1_establecimientos_de_salud_diciembre_2025.shp"
         )
-        salud_gdf = salud_gdf.rename(columns={"ID_ORIG": "id"})
+        salud_gdf = salud_gdf.rename(
+            columns={"ID_ORIG": "id", "NOMBRE": "name"}
+        )
         salud_gdf["F_INICIO"] = pd.to_datetime(salud_gdf["F_INICIO"])
 
         makedir(dest_path)
