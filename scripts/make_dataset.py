@@ -604,7 +604,7 @@ class MakeAreasVerdes(MakeDataset):
                     "service",
                 ]
             },
-            working_directory=xmin.quackosm_working_directory,
+            working_directory=INTERIM_DATA_PATH / "quackosm",
             geometry_filter=verdes_union,
             keep_all_tags=False,
         )
@@ -624,10 +624,8 @@ class MakeAreasVerdes(MakeDataset):
         print("Creando archivo GeoPackage...")
         gpkg_path = PROCESSED_DATA_PATH / "amenities" / "areas_verdes.gpkg"
         makedir(gpkg_path, is_file=True)
-        parks_gdf = points_gdf[points_gdf["TIPO_EP"] == "PARQUE"]
-        plazas_gdf = points_gdf[points_gdf["TIPO_EP"] == "PLAZA"]
-        parks_gdf.to_file(gpkg_path, layer="parques", driver="GPKG")
-        plazas_gdf.to_file(gpkg_path, layer="plazas", driver="GPKG")
+        points_gdf.to_file(gpkg_path, layer="puntos", driver="GPKG")
+        verdes_gdf.to_file(gpkg_path, layer="poligonos", driver="GPKG")
 
 
 if __name__ == "__main__":
