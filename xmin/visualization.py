@@ -250,6 +250,11 @@ class AccessibilityVisualizer:
         kwargs
             Argumentos que serán pasados al momento de graficar la grilla de
             origenes con los valores de `values`.
+  
+        Returns
+        ---
+        Objeto graficado (mapa de `folium` o ejes de `matplotlib`, según el
+        valor de `interactive`).
         """
 
         if isinstance(overlay_cfg.show_amenities, list):
@@ -367,6 +372,11 @@ class AccessibilityVisualizer:
             `interactive=False`) o `GeoDataFrame.explore()` (si
             `interactive=True`) al momento de graficar la grilla de orígenes
             con los valores de `column`.
+  
+        Returns
+        ---
+        Objeto graficado (mapa de `folium` o ejes de `matplotlib`, según el
+        valor de `interactive`).
         """
 
         if isinstance(column, str):
@@ -406,6 +416,11 @@ class AccessibilityVisualizer:
             `interactive=False`) o `GeoDataFrame.explore()` (si
             `interactive=True`) al momento de graficar la grilla de orígenes
             con los valores de `column`.
+  
+        Returns
+        ---
+        Objeto graficado (mapa de `folium` o ejes de `matplotlib`, según el
+        valor de `interactive`).
 
         References
         ---
@@ -520,6 +535,11 @@ class AccessibilityVisualizer:
             `interactive=False`) o `GeoDataFrame.explore()` (si
             `interactive=True`) al momento de graficar la grilla de orígenes
             con los valores de `column`.
+  
+        Returns
+        ---
+        Objeto graficado (mapa de `folium` o ejes de `matplotlib`, según el
+        valor de `interactive`).
         """
 
         if color_matrix is None:
@@ -690,6 +710,11 @@ class AccessibilityVisualizer:
             `interactive=False`) o `GeoDataFrame.explore()` (si
             `interactive=True`) al momento de graficar la grilla de orígenes
             con los valores de `column`.
+  
+        Returns
+        ---
+        Objeto graficado (mapa de `folium` o ejes de `matplotlib`, según el
+        valor de `interactive`).
         """
 
         weights_by_name = {
