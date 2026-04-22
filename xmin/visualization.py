@@ -1,9 +1,15 @@
 from dataclasses import dataclass, field
 from pathlib import Path
+import warnings
 
+import folium
 from folium.folium import Map
 import geopandas as gpd
+import mapclassify
+from mapclassify.classifiers import MapClassifier
 from matplotlib.axes import Axes
+from matplotlib.colors import ListedColormap
+import numpy as np
 import pandas as pd
 import quackosm as qosm
 from shapely.geometry.base import BaseGeometry
@@ -11,6 +17,96 @@ from shapely.geometry.base import BaseGeometry
 import xmin
 from xmin.amenities import Amenity
 from xmin.origins import Origins
+
+
+def add_bivariate_legend(
+    m: Map,
+    color_matrix: np.ndarray,
+    n: int,
+    var1_label: str,
+    var2_label: str,
+    legend_kwds: dict,
+) -> Map:
+    """
+    Agrega una leyenda a un mapa bivariado de coropletas, inyectando el código
+    correspondiente en HTML directamente al objeto.
+
+    Parameters
+    ---
+    m : Map
+        Mapa al cual agregar la leyenda.
+    color_matrix : ndarray
+        Matriz de `n*n` con los colores de la leyenda.
+    n : int
+        Número de filas y columnas que tiene la matriz de colores.
+    var1_label : str
+        Nombre de la primera variable (eje y).
+    var2_label : str
+        Nombre de la segunda variable (eje x).
+    legend_kwds : dict
+        Keywords que serán utilizadas para el estilo de la leyenda:
+        
+        - `cell_width` define el ancho de cada celda de color.
+        - `cell_height` define el alto de cada celda de color.
+        - El resto de parámetros definen el estilo de la caja que contiene a la
+          leyenda (padding, posición, color, etc.).
+          
+    Returns
+    ---
+    Mapa con la leyenda agregada.
+    """
+
+    cell_width = legend_kwds.pop("cell_width", "20px")
+    cell_height = legend_kwds.pop("cell_height", "20px")
+
+    cells = ""
+    for i in range(n - 1, -1, -1):
+        cells += "<tr>" + "".join(
+            f'<td style="width:{cell_width};height:{cell_height};'
+            f'background:{color_matrix[i][j]};"></td>'
+            for j in range(n)
+        ) + "</tr>"
+
+    div_style = "".join(f"{k}:{v};" for k, v in legend_kwds.items())
+
+    html = f"""
+    <div style="{div_style}">
+        <div style="
+            display:flex;
+            align-items:stretch;
+            gap:4px;
+        ">
+            <div style="
+                display:flex;
+                align-items:center;
+                justify-content:center;
+                writing-mode:vertical-rl;
+                transform:rotate(180deg);
+            ">
+                {var1_label} →
+            </div>
+            <div style="
+                display:flex;
+                flex-direction:column;
+            ">
+                <table style="
+                    border-collapse:collapse;
+                ">
+                    {cells}
+                </table>
+                <div style="
+                    text-align:center;
+                    margin-top:3px;
+                ">
+                    {var2_label} →
+                </div>
+            </div>
+        </div>
+    </div>
+    """
+
+    m.get_root().html.add_child(folium.Element(html))
+    return m
 
 
 @dataclass
@@ -325,3 +421,227 @@ class AccessibilityVisualizer:
         discomfort = discomfort.rename("discomfort")
 
         return self.choropleth(discomfort, interactive, overlay_cfg, **kwargs)
+
+    def bivariate_choropleth(
+        self,
+        column_1: str | pd.Series,
+        column_2: str | pd.Series,
+        n: int = 3,
+        classifier: type[MapClassifier] = mapclassify.EqualInterval,
+        color_matrix: np.ndarray | None = None,
+        legend: bool = True,
+        legend_kwds: dict | None = None,
+        interactive: bool = False,
+        overlay_cfg: OverlayConfig = OverlayConfig(),
+        **kwargs,
+    ):
+        """
+        Realiza una visualización de coropletas bivariada con los índices
+        deseados.
+
+        Parameters
+        ---
+        column_1 : str or Series
+            Primera serie de valores a mostrar. Puede ser el nombre de uno de
+            los índices ya calculados, o un cálculo propio. En el segundo caso,
+            el índice de la serie deben ser las IDs de las grillas de H3
+            incluidas en el análisis.
+        column_2 : str or Series
+            Segunda serie de valores a mostrar; aplican las mismas
+            restricciones que para `column_1`.
+        n : int, default: 3
+            Número de clases en las que se va a dividir cada variable. Se
+            recomienda mantener `n=3`; valores más altos generan un mapa de
+            colores demasiado grande.
+        classifier : type[MapClassifier]
+            Clase correspondiente a un `MapClassifier` de la librería
+            `mapclassify`, que permite dividir los datos de cada serie en
+            "bins" según algún criterio. El inicializador de la clase debe
+            recibir un conjunto de datos y un número de clases en las que
+            dividir los datos.
+        color_matrix : ndarray or None, default: None
+            Matriz de colores para asignar a las distintas clases. Debe ser una
+            matriz de `n*n`, donde `color_matrix[i, j]` guarda el color
+            asociado para elementos que caen en el bin `i` según `column_1`, y
+            en el bin `j` según `column_2`.
+
+            Si `n=3` y `color_matrix` es None, se utilizará una matriz de
+            colores por defecto, extraída del blog de Joshua Stevens sobre
+            mapas de coropletas bivariados
+            (https://www.joshuastevens.net/cartography/make-a-bivariate-choropleth-map/).
+            Para `n != 3`, se debe entregar `color_matrix` obligatoriamente.
+        legend : bool, default: True
+            Si se muestra la leyenda asociada a los distintos colores.
+        legend_kwds : dict | None, default: None
+            Lista de parámetros para la leyenda.
+
+            Si `interactive=False`, el diccionario puede contener los
+            siguientes parámetros:
+                - `"bounds"` (default: [1.05, 0.70, 0.25, 0.25]): límites de la
+                  leyenda. Debe ser una 4-tupla `[x0, y0, width, height]`,
+                  indicando la esquina inferior izquierda de la leyenda, su
+                  ancho y su alto. Todos estos valores son relativos al tamaño
+                  del gráfico (entre 0 y 1).
+                - `"label_fontsize"` (default: 10): tamaño de la fuente de los
+                  labels de la leyenda.
+
+            Si `interactive=True`, el diccionario puede contener los siguientes
+            parámetros:
+                - `"cell_width"` (default: "20px"): ancho de cada celda de
+                  color.
+                - `"cell_height"` (default: "20px"): alto de cada celda de
+                  color.
+                - El resto de parámetros definen el estilo de la caja que
+                  contiene a la
+                leyenda (padding, posición, color, etc.). Los parámetros por
+                defecto que pueden ser sobreescritos son:
+```
+{
+    "position": "fixed",
+    "top": "10px",
+    "right": "10px",
+    "z-index": 1000,
+    "background": "white",
+    "padding": "10px",
+    "border-radius": "4px",
+    "box-shadow": "0 0 6px rgba(0,0,0,0.3)",
+    "font-size": "11px",
+    "font-family": "Arial",
+}
+```
+
+        interactive : bool, default: False
+            Si la visualización será interactiva (mapa) o estática (gráfico).
+        overlay_cfg : OverlayConfig, default: OverlayConfig()
+            Configuración de capas adicionales. Ver `OverlayConfig`.
+        kwargs
+            Argumentos que serán pasados a `GeoDataFrame.plot()` (si
+            `interactive=False`) o `GeoDataFrame.explore()` (si
+            `interactive=True`) al momento de graficar la grilla de orígenes
+            con los valores de `column`.
+        """
+
+        if color_matrix is None:
+            if n == 3:
+                color_matrix = np.array(
+                    [
+                        ["#e8e8e8", "#ace4e4", "#5ac8c8"],
+                        ["#dfb0d6", "#a5add3", "#5698b9"],
+                        ["#be64ac", "#8c62aa", "#3b4994"],
+                    ]
+                )
+            else:
+                raise ValueError(
+                    "Si `n != 3`, se debe entregar `color_matrix` de `n * n`"
+                )
+        color_list = color_matrix.flatten()
+        cmap = ListedColormap(color_list)
+                
+        if kwargs.pop("cmap", None) is not None:
+            warnings.warn(
+                "Ignorando parámetro `cmap`; para cambiar el mapa de colores, "
+                "usar `color_matrix`."
+            )
+        if kwargs.pop("categories", None) is not None:
+            warnings.warn(
+                "Ignorando parámetro `categories`; las categorías son "
+                "determinadas según `classifier`."
+            )            
+
+        gdf_class = self._gdf.copy()
+        if isinstance(column_1, str):
+            column_1 = gdf_class[column_1]
+        if isinstance(column_2, str):
+            column_2 = gdf_class[column_2]
+
+        class_1 = f"{column_1.name}_class"
+        class_2 = f"{column_2.name}_class"
+
+        # assign classes for each column and combine the classes
+        split_1 = classifier(column_1, n)
+        gdf_class[class_1] = split_1.yb
+        split_2 = classifier(column_2, n)
+        gdf_class[class_2] = split_2.yb
+        gdf_class["bivariate_class"] = (
+            gdf_class[class_1] * n + gdf_class[class_2]
+        )
+        gdf_class["color"] = gdf_class["bivariate_class"].map(
+            lambda x: color_list[int(x)]
+        )
+
+        output = self._show(
+            gdf_class["bivariate_class"],
+            interactive,
+            overlay_cfg,
+            cmap=cmap,
+            categories=list(range(n * n)),
+            legend=False,
+            **kwargs,
+        )
+
+        if legend:
+            if interactive:
+                default_legend_kwds = {
+                    "cell_width": "20px",
+                    "cell_height": "20px",
+                    "position": "fixed",
+                    "top": "10px",
+                    "right": "10px",
+                    "z-index": 1000,
+                    "background": "white",
+                    "padding": "10px",
+                    "border-radius": "4px",
+                    "box-shadow": "0 0 6px rgba(0,0,0,0.3)",
+                    "font-size": "11px",
+                    "font-family": "Arial",
+                }
+                if legend_kwds is not None:
+                    legend_kwds = default_legend_kwds | legend_kwds
+                else:
+                    legend_kwds = default_legend_kwds
+                return add_bivariate_legend(
+                    output,
+                    color_matrix,
+                    n,
+                    column_1.name,
+                    column_2.name,
+                    legend_kwds,
+                )
+            else:
+                default_legend_kwds = {
+                    "bounds": [1.05, 0.70, 0.25, 0.25],
+                    "label_fontsize": 10,
+                }
+                if legend_kwds is not None:
+                    legend_kwds = default_legend_kwds | legend_kwds
+                else:
+                    legend_kwds = default_legend_kwds
+
+                ax: Axes = output
+                legend_ax = ax.inset_axes(
+                    legend_kwds["bounds"],
+                )
+                for spine in legend_ax.spines.values():
+                    spine.set_visible(False)
+                for i in range(n):
+                    for j in range(n):
+                        legend_ax.fill_between(
+                            [j, j + 1],
+                            [i, i],
+                            [i + 1, i + 1],
+                            color=color_matrix[i][j],
+                        )
+                legend_ax.set_xlabel(
+                    f"{column_2.name} →",
+                    fontsize=legend_kwds["label_fontsize"],
+                )
+                legend_ax.set_ylabel(
+                    f"{column_1.name} →",
+                    fontsize=legend_kwds["label_fontsize"],
+                )
+                legend_ax.set_xticks([])
+                legend_ax.set_yticks([])
+
+                return ax
+
+        return output
