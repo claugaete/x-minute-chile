@@ -2,9 +2,11 @@ from dataclasses import dataclass, field
 from pathlib import Path
 import warnings
 
+from esda.moran import Moran_Local
 import folium
 from folium.folium import Map
 import geopandas as gpd
+from libpysal.weights import Queen
 import mapclassify
 from mapclassify.classifiers import MapClassifier
 import matplotlib as mpl
@@ -250,7 +252,7 @@ class AccessibilityVisualizer:
         kwargs
             Argumentos que serán pasados al momento de graficar la grilla de
             origenes con los valores de `values`.
-  
+
         Returns
         ---
         Objeto graficado (mapa de `folium` o ejes de `matplotlib`, según el
@@ -372,7 +374,7 @@ class AccessibilityVisualizer:
             `interactive=False`) o `GeoDataFrame.explore()` (si
             `interactive=True`) al momento de graficar la grilla de orígenes
             con los valores de `column`.
-  
+
         Returns
         ---
         Objeto graficado (mapa de `folium` o ejes de `matplotlib`, según el
@@ -416,7 +418,7 @@ class AccessibilityVisualizer:
             `interactive=False`) o `GeoDataFrame.explore()` (si
             `interactive=True`) al momento de graficar la grilla de orígenes
             con los valores de `column`.
-  
+
         Returns
         ---
         Objeto graficado (mapa de `folium` o ejes de `matplotlib`, según el
@@ -535,7 +537,7 @@ class AccessibilityVisualizer:
             `interactive=False`) o `GeoDataFrame.explore()` (si
             `interactive=True`) al momento de graficar la grilla de orígenes
             con los valores de `column`.
-  
+
         Returns
         ---
         Objeto graficado (mapa de `folium` o ejes de `matplotlib`, según el
@@ -710,7 +712,7 @@ class AccessibilityVisualizer:
             `interactive=False`) o `GeoDataFrame.explore()` (si
             `interactive=True`) al momento de graficar la grilla de orígenes
             con los valores de `column`.
-  
+
         Returns
         ---
         Objeto graficado (mapa de `folium` o ejes de `matplotlib`, según el
@@ -751,4 +753,100 @@ class AccessibilityVisualizer:
             overlay_cfg,
             cmap=cmap,
             **kwargs,
+        )
+
+    def lisa(
+        self,
+        column: str | pd.Series = "total",
+        alpha_level: float = 0.05,
+        colors: dict[str, str] | None = None,
+        interactive: bool = False,
+        overlay_cfg: OverlayConfig = OverlayConfig(),
+        **kwargs,
+    ):
+        """
+        Visualiza indicadores locales de asociación espacial (LISA), utilizando
+        Local Moran's I. Divide el espacio en cuatro tipos de clusters:
+
+        - HH (high-high, "hotspots" de alta accesibilidad).
+        - LL (low-low, "coldspots" de baja accesibilidad).
+        - LH (low-high, "outliers" de baja accesibilidad cerca de zonas de alta
+          accesibilidad).
+        - HL (high-low, "outliers" de alta accesibilidad cerca de zonas de baja
+          accesibilidad).
+        - A estos clusters se suma la categoría "No significativo", para
+          orígenes que no cumplen ninguna de las definiciones anteriores.
+
+        Código inspirado en la librería `chiricoca`, desarrollada por Eduardo
+        Graells-Garrido
+        (https://github.com/PLUMAS-research/chiricoca/blob/master/src/chiricoca/maps/lisa.py).
+
+        Parameters
+        ---
+        column : str or Series
+            Serie de valores para los que se desea calcular LISA. Puede ser el
+            nombre de uno de los índices ya calculados, o un cálculo propio. En
+            el segundo caso, el índice de la serie deben ser las IDs de las
+            grillas de H3 incluidas en el análisis.
+        alpha_level : float, default: 0.05
+            Nivel de significancia para determinar los clusters de Local
+            Moran's I.
+        colors: dict[str, str] or None, default: None
+            Colores a utilizar para las distintas categorías. Se aceptan las
+            llaves `"HH"`, `"LL"`, `"LH"`, `"HL"` y `"No significativo"`. Si no
+            se recibe alguna de estas llaves, se utilizará el color por defecto
+            asociado a la categoría.
+        interactive : bool, default: False
+            Si la visualización será interactiva (mapa) o estática (gráfico).
+        overlay_cfg : OverlayConfig, default: OverlayConfig()
+            Configuración de capas adicionales. Ver `OverlayConfig`.
+        kwargs
+            Argumentos que serán pasados a `GeoDataFrame.plot()` (si
+            `interactive=False`) o `GeoDataFrame.explore()` (si
+            `interactive=True`) al momento de graficar la grilla de orígenes
+            con los valores de `column`.
+        """
+
+        if kwargs.pop("cmap", None) is not None:
+            warnings.warn(
+                "Ignorando parámetro `cmap`; para cambiar el mapa de colores, "
+                "usar `colors`."
+            )
+
+        if isinstance(column, str):
+            column = self._gdf[column]
+
+        w_zonas = Queen.from_dataframe(
+            self._gdf, use_index=True, silence_warnings=True
+        )
+        w_zonas.transform = "r"
+
+        with np.errstate(invalid="ignore"):
+            moran = Moran_Local(column, w_zonas)
+
+        idx_to_label = {1: "HH", 2: "LH", 3: "LL", 4: "HL"}
+        lisa_series = pd.Series(moran.q, index=self._gdf.index).map(
+            idx_to_label
+        )
+        # aumentamos p_sim de las "islas" (orígenes sin vecinos) para que no
+        # sean estadísticamente significativos (no tiene sentido calcular
+        # relaciones espaciales en esos casos)
+        p_sim = np.where(np.isnan(moran.z_sim), 1.0, moran.p_sim)
+        lisa_sig = p_sim < alpha_level
+        lisa_series.loc[~lisa_sig] = "No significativo"
+        lisa_series.name = "LISA Clusters"
+
+        label_to_color = {
+            "HH": "#d0730f",
+            "LL": "#70589f",
+            "LH": "#bfbbda",
+            "HL": "#fdc57f",
+            "No significativo": "#f6f6f7",
+        } | (colors if colors is not None else {})
+        category_dtype = pd.CategoricalDtype(label_to_color.keys())
+        lisa_series = lisa_series.astype(category_dtype)
+        cmap = ListedColormap(label_to_color.values())
+
+        return self._show(
+            lisa_series, interactive, overlay_cfg, cmap=cmap, **kwargs
         )

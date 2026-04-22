@@ -37,6 +37,7 @@ dependencies = [
     "beautifulsoup4>=4.14.3",
     "rarfile>=4.2",
     "openpyxl>=3.1.5",
+    "esda>=2.9.0",
 ]
 requires-python = "~=3.12.0"
 

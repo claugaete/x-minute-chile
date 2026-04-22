@@ -258,6 +258,24 @@ wheels = [
 ]
 
 [[package]]
+name = "esda"
+version = "2.9.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "geopandas" },
+    { name = "libpysal" },
+    { name = "numpy" },
+    { name = "pandas" },
+    { name = "scikit-learn" },
+    { name = "scipy" },
+    { name = "shapely" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/08/ac/34c427768bdb7970027c1f09e831ade3385dc96d975418b71e20aea6fb58/esda-2.9.0.tar.gz", hash = "sha256:90ec966c54e5ceb826fe0cedd7b335232862252b89cc9d1dbaa3e07a5fc9845a", size = 27476025, upload-time = "2026-03-20T22:51:21.732Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ff/f6/972903d150e18c5077d2914bf6fc82541a4b2939664f2d2a5d41167ee356/esda-2.9.0-py3-none-any.whl", hash = "sha256:b4f6d86c75f81e8ef4c451636b9c125cd8c489f307b3138773adbf83fddbae08", size = 163466, upload-time = "2026-03-20T22:51:19.139Z" },
+]
+
+[[package]]
 name = "et-xmlfile"
 version = "2.0.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1570,6 +1588,7 @@ source = { editable = "." }
 dependencies = [
     { name = "beautifulsoup4" },
     { name = "duckdb" },
+    { name = "esda" },
     { name = "folium" },
     { name = "geopandas" },
     { name = "h3" },
@@ -1600,6 +1619,7 @@ dev = [
 requires-dist = [
     { name = "beautifulsoup4", specifier = ">=4.14.3" },
     { name = "duckdb", specifier = "==1.1.3" },
+    { name = "esda", specifier = ">=2.9.0" },
     { name = "folium", specifier = ">=0.20.0" },
     { name = "geopandas", specifier = ">=1.1.3" },
     { name = "h3", specifier = ">=4.4.2" },
