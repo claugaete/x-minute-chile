@@ -630,6 +630,40 @@ class MakeAreasVerdes(MakeDataset):
         verdes_gdf.to_file(gpkg_path, layer="poligonos", driver="GPKG")
 
 
+class MakeFeriasLibres(MakeDataset):
+    """
+    Descarga y limpia datos de ferias libres en Chile, compilados por la
+    Oficina de Estudios y Políticas Agrarias (ODEPA), disponibles a través del
+    siguiente enlace:
+    https://www.odepa.gob.cl/precios/consumidor/localizador-ferias-libres.
+    """
+
+    name = "ferias-libres"
+    excel_path = RAW_DATA_PATH / "amenities" / "ferias" / "ferias_libres.xlsx"
+
+    def download(self):
+        download_file(
+            "https://bibliotecadigital.odepa.gob.cl/bitstream/handle/"
+            "20.500.12650/73143/Ferias_Pais_PowerBI.xlsx",
+            self.excel_path,
+        )
+
+    def clean(self):
+        print("Creando archivo GeoPackage...")
+        ferias_df = pd.read_excel(self.excel_path, sheet_name="Datos")
+        ferias_df = ferias_df.rename(columns={"ID": "id", "NOMBRE": "name"})
+        ferias_gdf = gpd.GeoDataFrame(
+            ferias_df,
+            geometry=gpd.points_from_xy(
+                ferias_df["Longitud"], ferias_df["Latitud"]
+            ),
+            crs=4326,
+        )
+        gpkg_path = PROCESSED_DATA_PATH / "amenities" / "ferias_libres.gpkg"
+        makedir(gpkg_path, is_file=True)
+        ferias_gdf.to_file(gpkg_path, layer="ferias", driver="GPKG")
+
+
 if __name__ == "__main__":
 
     make_osm = MakeOsm()
@@ -640,6 +674,7 @@ if __name__ == "__main__":
     make_farmacias = MakeFarmacias()
     make_educacion = MakeEducacion()
     make_areas_verdes = MakeAreasVerdes()
+    make_ferias_libres = MakeFeriasLibres()
 
     all_datasets: list[MakeDataset] = [
         make_osm,
@@ -650,6 +685,7 @@ if __name__ == "__main__":
         make_farmacias,
         make_educacion,
         make_areas_verdes,
+        make_ferias_libres,
     ]
 
     # datasets que reciben actualizaciones frecuentes (para evitar descargar
