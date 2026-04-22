@@ -395,7 +395,7 @@ class AccessibilityVisualizer:
         interactive: bool = False,
         overlay_cfg: OverlayConfig = OverlayConfig(),
         **kwargs,
-    ):
+    ) -> Axes | Map:
         """
         Visualización de NEXI-Discomfort, según la definición de Olivari et. al
         [1]_. Dado un origen con un rating de accesibilidad `R` y una población
@@ -450,7 +450,7 @@ class AccessibilityVisualizer:
         interactive: bool = False,
         overlay_cfg: OverlayConfig = OverlayConfig(),
         **kwargs,
-    ):
+    ) -> Axes | Map:
         """
         Realiza una visualización de coropletas bivariada con los índices
         deseados.
@@ -675,7 +675,7 @@ class AccessibilityVisualizer:
         interactive: bool = False,
         overlay_cfg: OverlayConfig = OverlayConfig(),
         **kwargs,
-    ):
+    ) -> Axes | Map:
         """
         Visualiza la necesidad "más urgente" para cada origen; esto es, la
         necesidad que aumentaría más el rating "total" (ponderado) si el rating
@@ -734,7 +734,7 @@ class AccessibilityVisualizer:
         most_urgent = urgency_df.idxmax(axis="columns").astype(
             categorical_dtype
         )
-        most_urgent.name = "most_urgent"
+        most_urgent.name = "Most Urgent"
 
         if isinstance(cmap, str):
             cmap = mpl.colormaps.get_cmap(cmap)
@@ -750,6 +750,5 @@ class AccessibilityVisualizer:
             interactive,
             overlay_cfg,
             cmap=cmap,
-            categorical=True,
             **kwargs,
         )
