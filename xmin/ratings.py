@@ -41,7 +41,7 @@ class AccessibilityRatings:
         self._weights = weights
         self._gdf = gdf
         self._visualize = AccessibilityVisualizer(
-            self._gdf, self._origins, [amenity for amenity in weights.keys()]
+            self._gdf, self._origins, self._weights
         )
 
     @property

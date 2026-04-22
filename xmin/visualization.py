@@ -7,8 +7,9 @@ from folium.folium import Map
 import geopandas as gpd
 import mapclassify
 from mapclassify.classifiers import MapClassifier
+import matplotlib as mpl
 from matplotlib.axes import Axes
-from matplotlib.colors import ListedColormap
+from matplotlib.colors import Colormap, ListedColormap
 import numpy as np
 import pandas as pd
 import quackosm as qosm
@@ -45,12 +46,12 @@ def add_bivariate_legend(
         Nombre de la segunda variable (eje x).
     legend_kwds : dict
         Keywords que serán utilizadas para el estilo de la leyenda:
-        
+
         - `cell_width` define el ancho de cada celda de color.
         - `cell_height` define el alto de cada celda de color.
         - El resto de parámetros definen el estilo de la caja que contiene a la
           leyenda (padding, posición, color, etc.).
-          
+
     Returns
     ---
     Mapa con la leyenda agregada.
@@ -61,11 +62,15 @@ def add_bivariate_legend(
 
     cells = ""
     for i in range(n - 1, -1, -1):
-        cells += "<tr>" + "".join(
-            f'<td style="width:{cell_width};height:{cell_height};'
-            f'background:{color_matrix[i][j]};"></td>'
-            for j in range(n)
-        ) + "</tr>"
+        cells += (
+            "<tr>"
+            + "".join(
+                f'<td style="width:{cell_width};height:{cell_height};'
+                f'background:{color_matrix[i][j]};"></td>'
+                for j in range(n)
+            )
+            + "</tr>"
+        )
 
     div_style = "".join(f"{k}:{v};" for k, v in legend_kwds.items())
 
@@ -164,16 +169,20 @@ class AccessibilityVisualizer:
         GeoDataFrame con los ratings del área a analizar.
     origins : Origins
         Orígenes representando el área a analizar.
-    amenities : list[Amenity]
-        Lista de necesidades consideradas en el análisis.
+    weights : dict[Amenity, float]
+        Pesos relativos de las distintas necesidades para el cálculo del índice
+        "total" de `gdf`.
     """
 
     def __init__(
-        self, gdf: gpd.GeoDataFrame, origins: Origins, amenities: list[Amenity]
+        self,
+        gdf: gpd.GeoDataFrame,
+        origins: Origins,
+        weights: dict[Amenity, float],
     ):
         self._gdf = gdf
         self._origins = origins
-        self._amenities = amenities
+        self._weights = weights
 
     @staticmethod
     def _get_roads(
@@ -251,7 +260,7 @@ class AccessibilityVisualizer:
                     overlay_cfg.show_amenities
                 )
         elif overlay_cfg.show_amenities:
-            amenities_to_plot = self._get_destinations(self._amenities)
+            amenities_to_plot = self._get_destinations(self._weights.keys())
 
         if overlay_cfg.show_roads and not overlay_cfg.roads_gdf:
             if overlay_cfg.roads_pbf_path:
@@ -297,20 +306,12 @@ class AccessibilityVisualizer:
         else:
             # make sure legend and plot have same alpha by default (they can be
             # overwritten if needed)
-            default_legend_kwds = {
-                "alpha": (
-                    xmin.alpha_when_roads_shown
-                    if overlay_cfg.show_roads
-                    else 1
-                )
-            } | kwargs.pop("legend_kwds", {})
             default_plot_kwds = {
                 "alpha": (
                     xmin.alpha_when_roads_shown
                     if overlay_cfg.show_roads
                     else 1
                 ),
-                "legend_kwds": default_legend_kwds,
             }
 
             default_borders_kwds = {"edgecolor": "black", "facecolor": "none"}
@@ -495,20 +496,20 @@ class AccessibilityVisualizer:
                   contiene a la
                 leyenda (padding, posición, color, etc.). Los parámetros por
                 defecto que pueden ser sobreescritos son:
-```
-{
-    "position": "fixed",
-    "top": "10px",
-    "right": "10px",
-    "z-index": 1000,
-    "background": "white",
-    "padding": "10px",
-    "border-radius": "4px",
-    "box-shadow": "0 0 6px rgba(0,0,0,0.3)",
-    "font-size": "11px",
-    "font-family": "Arial",
-}
-```
+                ```
+                {
+                    "position": "fixed",
+                    "top": "10px",
+                    "right": "10px",
+                    "z-index": 1000,
+                    "background": "white",
+                    "padding": "10px",
+                    "border-radius": "4px",
+                    "box-shadow": "0 0 6px rgba(0,0,0,0.3)",
+                    "font-size": "11px",
+                    "font-family": "Arial",
+                }
+                ```
 
         interactive : bool, default: False
             Si la visualización será interactiva (mapa) o estática (gráfico).
@@ -536,7 +537,7 @@ class AccessibilityVisualizer:
                 )
         color_list = color_matrix.flatten()
         cmap = ListedColormap(color_list)
-                
+
         if kwargs.pop("cmap", None) is not None:
             warnings.warn(
                 "Ignorando parámetro `cmap`; para cambiar el mapa de colores, "
@@ -546,7 +547,7 @@ class AccessibilityVisualizer:
             warnings.warn(
                 "Ignorando parámetro `categories`; las categorías son "
                 "determinadas según `classifier`."
-            )            
+            )
 
         gdf_class = self._gdf.copy()
         if isinstance(column_1, str):
@@ -645,3 +646,85 @@ class AccessibilityVisualizer:
                 return ax
 
         return output
+
+    def most_urgent_amenity(
+        self,
+        reorder: bool = True,
+        cmap: str | Colormap = "Accent",
+        na_color: str | None = None,
+        interactive: bool = False,
+        overlay_cfg: OverlayConfig = OverlayConfig(),
+        **kwargs,
+    ):
+        """
+        Visualiza la necesidad "más urgente" para cada origen; esto es, la
+        necesidad que aumentaría más el rating "total" (ponderado) si el rating
+        de la necesidad aumentase a 100%. Matemáticamente, para cada origen
+        `i`, la necesidad más urgente es la necesidad `A` que maximiza
+        `weight[A] * (1 - Rating[i, A])`, donde `Rating[i, A]` es el rating de
+        accesibilidad de la necesidad `A` en el origen `i`. Si un origen tiene
+        todas sus necesidades al 100%, el resultado es "N/A".
+
+        Parameters
+        ---
+        reorder : bool, default: True
+            Si reordenar las necesidades alfabéticamente (para la leyenda y el
+            orden en que se asocian los colores de `cmap`). La categoría "N/A"
+            siempre quedará al final.
+        cmap : str or Colormap, default: Accent
+            Colormap a utilizar. Si es un string, se extraerá el colormap
+            correspondiente de `matplotlib.colormaps`. Se utilizarán los
+            **primeros** N colores, donde N es la cantidad de necesidades a
+            considerar. Si `na_color` es None, entonces se utilizarán los
+            primeros N+1 colores, con la categoría "N/A" usando siempre el
+            último.
+        na_color : str or None, default: None
+            Color especial para celdas con valor "N/A". Si es None, se utiliza
+            el color N+1 de `cmap`.
+        interactive : bool, default: False
+            Si la visualización será interactiva (mapa) o estática (gráfico).
+        overlay_cfg : OverlayConfig, default: OverlayConfig()
+            Configuración de capas adicionales. Ver `OverlayConfig`.
+        kwargs
+            Argumentos que serán pasados a `GeoDataFrame.plot()` (si
+            `interactive=False`) o `GeoDataFrame.explore()` (si
+            `interactive=True`) al momento de graficar la grilla de orígenes
+            con los valores de `column`.
+        """
+
+        weights_by_name = {
+            amenity.name: weight for amenity, weight in self._weights.items()
+        }
+
+        urgency_df = self._gdf.drop(columns=["total", "geometry"]).apply(
+            lambda rating: weights_by_name[rating.name] * (1 - rating)
+        )
+        urgency_df["N/A"] = urgency_df.sum(axis=1) == 0
+        categories = urgency_df.columns
+        if reorder:
+            categories = list(
+                categories.drop("N/A").sort_values(key=lambda x: x.str.lower())
+            ) + ["N/A"]
+        categorical_dtype = pd.CategoricalDtype(categories=categories)
+        most_urgent = urgency_df.idxmax(axis="columns").astype(
+            categorical_dtype
+        )
+        most_urgent.name = "most_urgent"
+
+        if isinstance(cmap, str):
+            cmap = mpl.colormaps.get_cmap(cmap)
+        colors = [cmap(i) for i in range(len(categories) - 1)]
+        if na_color is not None:
+            colors.append(na_color)
+        else:
+            colors.append(cmap(len(categories) - 1))
+        cmap = ListedColormap(colors)
+
+        return self._show(
+            most_urgent,
+            interactive,
+            overlay_cfg,
+            cmap=cmap,
+            categorical=True,
+            **kwargs,
+        )
