@@ -6,7 +6,7 @@ import geopandas as gpd
 import quackosm as qosm
 from shapely.geometry.base import BaseGeometry
 
-import xmin
+from xmin.config import config
 from xmin.geometry import to_centroids
 
 
@@ -23,14 +23,14 @@ class Amenity:
         GeoDataFrame con los puntos que satisfacen la necesidad. Requiere al
         menos una columna `id` y una columna `geometry`; opcionalmente puede
         tener las siguientes columnas:
-        
+
         - `weight` si se desea ponderar un punto por sobre otro
             (si no existe esta columna, se asumirá un peso 1 para todos los
             puntos).
         - `name` si se desea asignar un nombre que sea considerado por algunos
             métodos de visualización interactiva (que aparezca el nombre al
             hacer "hover" por encima del punto).
-        
+
         Si alguna geometría de la columna `geometry` no es del tipo
         `Point`, se lanzará una advertencia y se convertirá a `Point` usando su
         centroide.
@@ -151,7 +151,7 @@ def osm_amenity(
         qosm.convert_pbf_to_geodataframe(
             osm_path,
             tags_filter=osm_filter,
-            working_directory=xmin.quackosm_working_directory,
+            working_directory=config.quackosm_working_directory,
             geometry_filter=bounds,
             keep_all_tags=False if not keep_all_tags else True,
             explode_tags=True,
@@ -163,7 +163,7 @@ def osm_amenity(
         amenity_gdf = amenity_gdf[["id"] + keep_all_tags + ["geometry"]]
     if use_area_as_weight:
         amenity_gdf["weight"] = amenity_gdf.to_crs(
-            xmin.projected_crs
+            config.projected_crs
         ).area.apply(area_to_weight_function)
 
     return Amenity(name, to_centroids(amenity_gdf))

@@ -4,7 +4,7 @@ from shapely import MultiPoint, MultiPolygon, Point, Polygon
 from shapely.geometry.base import BaseGeometry
 from tqdm.auto import tqdm
 
-import xmin
+from xmin.config import config
 from xmin.geometry import convert_polygon_to_representative_points
 
 
@@ -55,7 +55,7 @@ def clean_parks(
         se asignará `max_dist = 2*min_dist`.
     """
 
-    parks_gdf = parks_gdf.to_crs(xmin.projected_crs).assign(
+    parks_gdf = parks_gdf.to_crs(config.projected_crs).assign(
         park_id=(
             parks_gdf.index
             if index_column is None
@@ -64,7 +64,7 @@ def clean_parks(
         area=lambda gdf: gdf.area
     )
 
-    pedestrian_network = pedestrian_network.to_crs(xmin.projected_crs)
+    pedestrian_network = pedestrian_network.to_crs(config.projected_crs)
 
     # some ways in the network are polygons, they need to be converted into
     # lines
@@ -111,14 +111,14 @@ def clean_parks(
                 max_dist=max_dist,
             )
             result = gpd.GeoDataFrame(
-                [row] * len(representative_points), crs=xmin.projected_crs
+                [row] * len(representative_points), crs=config.projected_crs
             )
             result = result.set_geometry(representative_points)
             result["weight"] = result["area"] / len(result)
             results.append(result)
 
     points_gdf = gpd.GeoDataFrame(
-        pd.concat(results, ignore_index=True), crs=xmin.projected_crs
+        pd.concat(results, ignore_index=True), crs=config.projected_crs
     )
     points_gdf["n_points"] = points_gdf["park_id"].map(
         points_gdf["park_id"].value_counts()

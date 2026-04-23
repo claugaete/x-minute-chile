@@ -17,8 +17,8 @@ import pandas as pd
 import quackosm as qosm
 from shapely.geometry.base import BaseGeometry
 
-import xmin
 from xmin.amenities import Amenity
+from xmin.config import config
 from xmin.origins import Origins
 
 
@@ -202,7 +202,7 @@ class AccessibilityVisualizer:
                     "tertiary",
                 ]
             },
-            working_directory=xmin.quackosm_working_directory,
+            working_directory=config.quackosm_working_directory,
             geometry_filter=bounds,
             keep_all_tags=False,
         )
@@ -315,7 +315,7 @@ class AccessibilityVisualizer:
             # overwritten if needed)
             default_plot_kwds = {
                 "alpha": (
-                    xmin.alpha_when_roads_shown
+                    config.alpha_when_roads_shown
                     if overlay_cfg.show_roads
                     else 1
                 ),

@@ -10,8 +10,8 @@ import pandas as pd
 import r5py
 from tqdm.auto import tqdm
 
-import xmin
 from xmin.amenities import Amenity
+from xmin.config import config
 from xmin.geometry import to_centroids
 from xmin.origins import Origins
 
@@ -331,13 +331,13 @@ class TravelTimeMatrices:
                     {
                         "weight": "sum",
                         "geometry": lambda geoms: geoms.to_crs(
-                            xmin.projected_crs
+                            config.projected_crs
                         )
                         .union_all()
                         .centroid,
                     }
                 ),
-                crs=xmin.projected_crs,
+                crs=config.projected_crs,
             )
             .to_crs(4326)
             .reset_index()

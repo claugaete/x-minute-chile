@@ -17,7 +17,7 @@ import requests
 from sklearn.cluster import DBSCAN
 from tqdm.auto import tqdm
 
-import xmin
+from xmin.config import config
 from xmin.dataset.download import download_file, makedir
 from xmin.dataset.gtfs import clean_gtfs_frequencies, clean_gtfs_shapes
 from xmin.dataset.parks import clean_parks
@@ -454,7 +454,7 @@ class MakeEducacion(MakeDataset):
             name=gdf["NOMBRE_INS"] + " - " + gdf["NOMBRE_INM"],
             id=gdf.index,
         ).drop(columns="AÑO")
-        gdf_proj = gdf.to_crs(xmin.projected_crs)
+        gdf_proj = gdf.to_crs(config.projected_crs)
 
         # guardamos índices y sus clusters, ordenados por universidad
         all_indices = []

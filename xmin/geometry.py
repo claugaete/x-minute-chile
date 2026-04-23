@@ -5,7 +5,7 @@ import geopandas as gpd
 import numpy as np
 from shapely import MultiPoint, Point, Polygon
 
-import xmin
+from xmin.config import config
 
 
 def to_centroids(
@@ -26,7 +26,7 @@ def to_centroids(
     """
     original_crs = gdf.crs
     return gdf.assign(
-        geometry=gdf.geometry.to_crs(xmin.projected_crs).centroid.to_crs(
+        geometry=gdf.geometry.to_crs(config.projected_crs).centroid.to_crs(
             original_crs
         )
     )

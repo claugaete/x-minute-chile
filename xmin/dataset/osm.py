@@ -5,7 +5,7 @@ import tempfile
 
 from shapely.geometry import MultiPolygon, Polygon
 
-import xmin
+from xmin.config import config
 from xmin.dataset.download import makedir
 
 
@@ -81,7 +81,7 @@ def extract_osm_subset(
         tmp.flush()
         makedir(Path(outpath), is_file=True)
         args = [
-            xmin.osmconvert_path,
+            config.osmconvert_path,
             inpath,
             f"-B={tmp.name}",
             f"-o={outpath}",
