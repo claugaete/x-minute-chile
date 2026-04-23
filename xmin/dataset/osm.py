@@ -5,8 +5,8 @@ import tempfile
 
 from shapely.geometry import MultiPolygon, Polygon
 
-from xmin.config import config
-from xmin.dataset.download import makedir
+from ..config import config
+from .download import makedir
 
 
 def shapely_to_osmosis_polygon(

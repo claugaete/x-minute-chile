@@ -1,6 +1,5 @@
 # helper functions for downloading files
 from pathlib import Path
-import warnings
 
 from dateutil.parser import parse as parsedate
 import requests

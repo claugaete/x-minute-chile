@@ -5,7 +5,7 @@ import geopandas as gpd
 import numpy as np
 from shapely import MultiPoint, Point, Polygon
 
-from xmin.config import config
+from .config import config
 
 
 def to_centroids(

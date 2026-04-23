@@ -17,9 +17,9 @@ import pandas as pd
 import quackosm as qosm
 from shapely.geometry.base import BaseGeometry
 
-from xmin.amenities import Amenity
-from xmin.config import config
-from xmin.origins import Origins
+from .amenities import Amenity
+from .config import config
+from .origins import Origins
 
 
 def add_bivariate_legend(

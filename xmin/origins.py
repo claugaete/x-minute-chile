@@ -2,7 +2,7 @@ import geopandas as gpd
 from tobler.area_weighted import area_interpolate
 from tobler.util import h3fy
 
-from xmin.config import config
+from .config import config
 
 
 class Origins:

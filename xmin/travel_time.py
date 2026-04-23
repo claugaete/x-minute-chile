@@ -10,10 +10,10 @@ import pandas as pd
 import r5py
 from tqdm.auto import tqdm
 
-from xmin.amenities import Amenity
-from xmin.config import config
-from xmin.geometry import to_centroids
-from xmin.origins import Origins
+from .amenities import Amenity
+from .config import config
+from .geometry import to_centroids
+from .origins import Origins
 
 
 def _check_duplicate_amenities(amenities: list[Amenity]):

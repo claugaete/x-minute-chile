@@ -6,8 +6,8 @@ import geopandas as gpd
 import quackosm as qosm
 from shapely.geometry.base import BaseGeometry
 
-from xmin.config import config
-from xmin.geometry import to_centroids
+from .config import config
+from .geometry import to_centroids
 
 
 class Amenity:

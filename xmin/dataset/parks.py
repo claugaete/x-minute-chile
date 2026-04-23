@@ -4,8 +4,8 @@ from shapely import MultiPoint, MultiPolygon, Point, Polygon
 from shapely.geometry.base import BaseGeometry
 from tqdm.auto import tqdm
 
-from xmin.config import config
-from xmin.geometry import convert_polygon_to_representative_points
+from ..config import config
+from ..geometry import convert_polygon_to_representative_points
 
 
 def clean_parks(

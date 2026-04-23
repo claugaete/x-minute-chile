@@ -5,11 +5,11 @@ import pandas as pd
 from shapely.geometry.base import BaseGeometry
 from tqdm.auto import tqdm
 
-from xmin.amenities import Amenity
-from xmin.geometry import to_centroids
-from xmin.indices import IndexFunction
-from xmin.origins import Origins
-from xmin.visualization import AccessibilityVisualizer
+from .amenities import Amenity
+from .geometry import to_centroids
+from .indices import IndexFunction
+from .origins import Origins
+from .visualization import AccessibilityVisualizer
 
 
 class AccessibilityRatings:
