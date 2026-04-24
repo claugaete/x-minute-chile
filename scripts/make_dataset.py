@@ -159,12 +159,12 @@ class MakeCenso(MakeDataset):
 
         print("Convirtiendo capas a EPSG:4326...")
         layers = gpd.list_layers(input_gpkg)["name"].tolist()
-        for i, layer in tqdm(enumerate(layers), total=len(layers)):
+        makedir(output_gpkg, is_file=True, remove_if_exists=True)
+        for layer in tqdm(layers, total=len(layers)):
             gdf = gpd.read_file(input_gpkg, layer=layer)
             if gdf.crs is not None:
                 gdf = gdf.to_crs(4326)
-            mode = "w" if i == 0 else "a"
-            gdf.to_file(output_gpkg, layer=layer, driver="GPKG", mode=mode)
+            gdf.to_file(output_gpkg, layer=layer, driver="GPKG")
 
 
 class MakeGtfsSantiago(MakeDataset):
@@ -358,7 +358,7 @@ class MakeFarmacias(MakeDataset):
         )
 
         gpkg_path = PROCESSED_DATA_PATH / "amenities" / "farmacias.gpkg"
-        makedir(gpkg_path, is_file=True)
+        makedir(gpkg_path, is_file=True, remove_if_exists=True)
         farmacias_gdf.to_file(gpkg_path)
 
 
@@ -384,7 +384,7 @@ class MakeSalud(MakeDataset):
     def clean(self):
         print("Extrayendo ZIP...")
         interim_path = INTERIM_DATA_PATH / "amenities" / "salud"
-        dest_path = PROCESSED_DATA_PATH / "amenities"
+        gpkg_path = PROCESSED_DATA_PATH / "amenities" / "salud"
         unzip(self.zip_path, interim_path)
 
         print("Creando archivo GeoPackage...")
@@ -397,8 +397,8 @@ class MakeSalud(MakeDataset):
         )
         salud_gdf["F_INICIO"] = pd.to_datetime(salud_gdf["F_INICIO"])
 
-        makedir(dest_path)
-        salud_gdf.to_file(dest_path / "salud.gpkg")
+        makedir(gpkg_path, is_file=True, remove_if_exists=True)
+        salud_gdf.to_file(gpkg_path)
 
 
 class MakeEducacion(MakeDataset):
@@ -418,8 +418,8 @@ class MakeEducacion(MakeDataset):
     ---
     cluster_min_eps : float, default: 500
         Distancia utilizada como `min_eps` en el algoritmo de clustering DBSCAN
-        para agrupar edificios cercanos de una misma universidad bajo el mismo
-        "campus".
+        para agrupar edificios cercanos de un mismo establecimiento de
+        educación superior bajo el mismo "campus".
     """
 
     name = "educacion"
@@ -517,7 +517,7 @@ class MakeEducacion(MakeDataset):
             unzip(self.zip_path(name), interim_path)
 
         print("Creando archivo GeoPackage...")
-        makedir(gpkg_path, is_file=True)
+        makedir(gpkg_path, is_file=True, remove_if_exists=True)
         for name, clean in clean_functions.items():
             gdf = _clean_ide_dataset_numbers(interim_path / filenames[name])
             cleaned_gdf = clean(gdf)
@@ -625,7 +625,7 @@ class MakeAreasVerdes(MakeDataset):
         # split parks and plazas, and save
         print("Creando archivo GeoPackage...")
         gpkg_path = PROCESSED_DATA_PATH / "amenities" / "areas_verdes.gpkg"
-        makedir(gpkg_path, is_file=True)
+        makedir(gpkg_path, is_file=True, remove_if_exists=True)
         points_gdf.to_file(gpkg_path, layer="puntos", driver="GPKG")
         verdes_gdf.to_file(gpkg_path, layer="poligonos", driver="GPKG")
 
@@ -660,7 +660,7 @@ class MakeFeriasLibres(MakeDataset):
             crs=4326,
         )
         gpkg_path = PROCESSED_DATA_PATH / "amenities" / "ferias_libres.gpkg"
-        makedir(gpkg_path, is_file=True)
+        makedir(gpkg_path, is_file=True, remove_if_exists=True)
         ferias_gdf.to_file(gpkg_path, layer="ferias", driver="GPKG")
 
 

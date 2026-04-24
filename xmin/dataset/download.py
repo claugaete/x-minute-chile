@@ -1,4 +1,5 @@
 # helper functions for downloading files
+import os
 from pathlib import Path
 
 from dateutil.parser import parse as parsedate
@@ -6,14 +7,22 @@ import requests
 from tqdm.auto import tqdm
 
 
-def makedir(path: Path, is_file: bool = False) -> None:
+def makedir(path: Path, is_file: bool = False, remove_if_exists: bool = False) -> None:
     """
-    Revisa si un directorio existe, creándolo si no es el caso. Si
-    `parent=True`, se asume que `path` es la ruta de un archivo, y se revisa si
-    existe el directorio que lo contiene (su padre).
+    Revisa si un directorio existe, creándolo si no es el caso.
+    
+    Si `is_file=True`, se asume que `path` es la ruta de un archivo, y se
+    revisa si existe el directorio que lo contiene (su padre).
+    
+    Si `remove_if_exists=True`, se elimina el directorio o archivo en caso de
+    ya existir, para poder sobreescribirlo con el nuevo directorio o archivo.
     """
 
     path_res = path.resolve()
+    
+    if remove_if_exists and path_res.exists():
+        os.remove(path_res)
+    
     if is_file:
         path_res = path_res.parent
 
