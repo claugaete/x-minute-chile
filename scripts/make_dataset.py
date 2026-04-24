@@ -4,7 +4,7 @@ import argparse
 import json
 from pathlib import Path
 import re
-from typing import Callable
+import subprocess
 import zipfile
 
 from bs4 import BeautifulSoup
@@ -12,7 +12,6 @@ import geopandas as gpd
 import numpy as np
 import pandas as pd
 import quackosm as qosm
-import rarfile
 import requests
 from sklearn.cluster import DBSCAN
 from tqdm.auto import tqdm
@@ -36,20 +35,25 @@ def unzip(zip_path: Path, out_dir: Path):
 
 def unrar(rar_path: Path, out_dir: Path):
     """Extrae un RAR desde `rar_path` a la carpeta `out_dir`, permitiendo
-    manejar errores si no se logra extrar automáticamente."""
+    manejar errores si no se logra extraer automáticamente usando `unrar`."""
+    rar_path = rar_path.resolve()
+    out_dir = out_dir.resolve()
     try:
-        with rarfile.RarFile(rar_path, "r") as rar_ref:
-            rar_ref.extractall(out_dir)
-    except rarfile.RarCannotExec:
+        subprocess.run(
+            ["unrar", "x", "-y", rar_path, out_dir],
+            check=True,
+            stderr=subprocess.DEVNULL,
+        )
+    except FileNotFoundError:
         failed_unrar_choice = ""
         while failed_unrar_choice not in ("1", "2"):
             failed_unrar_choice = input(
-                "rarfile requiere que `unrar` o `unar` se encuentre en el "
-                "PATH.\n"
+                "La extracción automática de archivos RAR requiere que "
+                "`unrar` se encuentre en el PATH.\n"
                 "(1) Ya agregué la herramienta al PATH y quiero intentar la "
                 "extracción automática nuevamente.\n"
-                f"(2) Ya extraí manualmente el RAR a {out_dir} y quiero "
-                "continuar.\n"
+                "(2) Ya extraí manualmente los contenidos del RAR a "
+                f"{out_dir} y quiero continuar.\n"
                 "Opción escogida (1 o 2): "
             )
         if failed_unrar_choice == "1":
@@ -404,13 +408,12 @@ class MakeSalud(MakeDataset):
 class MakeEducacion(MakeDataset):
     """
     Descarga y limpia datasets de establecimientos educacionales en Chile,
-    descargando datos proporcionados por el Ministerio de Educación a través
-    del Geoportal IDE. Se cuenta con los siguientes datasets:
+    descargando datos proporcionados por el Ministerio de Educación a través de
+    su propia página y del Geoportal IDE. Se cuenta con los siguientes
+    datasets:
 
-    - Establecimientos de educación parvularia, año 2021:
-      https://geoportal.cl/geoportal/catalog/35553/Establecimientos%20Educaci%C3%B3n%20Parvularia.
-    - Establecimientos de educación escolar, año 2021:
-      https://geoportal.cl/geoportal/catalog/35408/Establecimientos%20Educaci%C3%B3n%20Escolar.
+    - Establecimientos de educación parvularia y escolar, año 2025:
+      https://datosabiertos.mineduc.cl/directorio-de-establecimientos-educacionales/.
     - Establecimientos de educación superior, año 2020:
       https://geoportal.cl/geoportal/catalog/35554/Establecimientos%20de%20Educaci%C3%B3n%20Superior.
 
@@ -423,32 +426,126 @@ class MakeEducacion(MakeDataset):
     """
 
     name = "educacion"
+    escolar_rar_path = (
+        RAW_DATA_PATH / "amenities" / "educacion" / "parvularia_escolar.rar"
+    )
+    superior_zip_path = (
+        RAW_DATA_PATH / "amenities" / "educacion" / "superior.zip"
+    )
+    interim_path = INTERIM_DATA_PATH / "amenities" / "educacion"
 
     def __init__(self, cluster_min_eps: float = 500):
         super().__init__()
         self.cluster_min_eps = cluster_min_eps
 
-    def zip_path(self, name):
-        """Ruta del ZIP para cada dataset de educación."""
-        return (
-            RAW_DATA_PATH / "amenities" / "educacion" / "{}.zip".format(name)
+    def _clean_parvularia_escolar(self) -> gpd.GeoDataFrame:
+        """
+        Reemplaza valores de columnas codificadas numéricamente a sus valores
+        categóricos; elimina establecimientos que no estén funcionando o que no
+        tengan matrícula.
+        """
+
+        print("Limpiando dataset de educación escolar...")
+        unrar(self.escolar_rar_path, self.interim_path)
+        df = pd.read_csv(
+            self.interim_path
+            / "20250926_Directorio_Oficial_EE_2025_20250430_WEB.csv",
+            sep=";",
         )
 
-    def _clean_parvularia(self, gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
-        gdf["id"] = gdf.index
-        return gdf.rename(columns={"NOM_ESTAB": "name"}).drop(columns="AGNO")
+        # filtramos establecimientos funcionales
+        df = df[(df["ESTADO_ESTAB"] == 1) & (df["MATRICULA"] == 1)]
 
-    def _clean_escolar(self, gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
-        return gdf.rename(columns={"RBD": "id", "NOM_RBD": "name"}).drop(
-            columns="AGNO"
+        # eliminamos columnas innecesarias
+        df = df.drop(
+            columns={
+                "AGNO",
+                "DGV_RBD",
+                "MRUN",
+                "RUT_SOSTENEDOR",
+                "P_JURIDICA",
+                "MATRICULA",
+                "ESTADO_ESTAB",
+            }
+        ).rename(
+            columns={
+                "RBD": "id",
+                "NOM_RBD": "name",
+                "COD_DEPE2": "COD_DEPE_AGRUPADO",
+                "MAT_ENS_1": "MAT_PARVULARIO",
+                "MAT_ENS_2": "MAT_BASICA_REGULAR",
+                "MAT_ENS_3": "MAT_BASICA_ADULTO",
+                "MAT_ENS_4": "MAT_ESPECIAL",
+                "MAT_ENS_5": "MAT_MEDIA_HC_JOVENES",
+                "MAT_ENS_6": "MAT_MEDIA_HC_ADULTOS",
+                "MAT_ENS_7": "MAT_MEDIA_TC_JOVENES",
+                "MAT_ENS_8": "MAT_MEDIA_TC_ADULTOS",
+            }
         )
 
-    def _clean_superior(self, gdf: gpd.GeoDataFrame) -> gpd.GeoDataFrame:
+        for column in ["LATITUD", "LONGITUD"]:
+            df[column] = (
+                df[column]
+                .str.replace(",", ".", n=1)
+                .str.replace({",": "", " ": ""})  # bad data
+            )
+
+        for column in ["RURAL_RBD", "CONVENIO_PIE", "PACE"]:
+            df[column] = df[column].astype(bool)
+
+        value_dicts = {
+            "COD_DEPE": {
+                "1": "Corporación Municipal",
+                "2": "Municipal DAEM",
+                "3": "Particular Subvencionado",
+                "4": "Particular Pagado",
+                "5": "Corporación de Administración Delegada",
+                "6": "Servicio Local de Educación"
+            },
+            "COD_DEPE_AGRUPADO": {
+                "1": "Municipal",
+                "2": "Particular Subvencionado",
+                "3": "Particular Pagado",
+                "4": "Corporación de Administración Delegada",
+                "5": "Servicio Local de Educación"
+            },
+            "ORI_RELIGIOSA": {
+                "1": "Laica",
+                "2": "Católica",
+                "3": "Evangélica",
+                "4": "Musulmana",
+                "5": "Judía",
+                "6": "Budista",
+                "7": "Otro",
+                "9": "Sin información"
+            }
+        }
+
+        for column, value_dict in value_dicts.items():
+            print(df[column].astype(str))
+            df[column] = df[column].astype(str).map(value_dict)
+            print(df[column])
+
+        return gpd.GeoDataFrame(
+            df,
+            geometry=gpd.points_from_xy(
+                df["LONGITUD"], df["LATITUD"], crs=4326
+            ),
+        )
+
+    def _clean_superior(self) -> gpd.GeoDataFrame:
         """
         Agrupa edificios cercanos que pertenecen a la misma universidad,
         reduciendo sus pesos para no considerarlos como distintas universidades
         sino que como una sola universidad con varias "entradas".
         """
+
+        print("Limpiando dataset de educación superior...")
+        unzip(self.superior_zip_path, self.interim_path)
+        gdf = _clean_ide_dataset_numbers(
+            self.interim_path
+            / "layer_establecimientos_de_educacion_superior_20220309024111.shp"
+        )
 
         gdf = gdf.assign(
             name=gdf["NOMBRE_INS"] + " - " + gdf["NOMBRE_INM"],
@@ -488,40 +585,29 @@ class MakeEducacion(MakeDataset):
         return gdf.drop(columns="_cluster")
 
     def download(self):
-        urls = {
-            "parvularia": "https://www.geoportal.cl/geoportal/catalog/download/b52e4229-365e-3163-b211-679cc6b2fd99",
-            "escolar": "https://www.geoportal.cl/geoportal/catalog/download/d6bf9431-3282-3738-bd69-baf0d1ad63ec",
-            "superior": "https://www.geoportal.cl/geoportal/catalog/download/0dde8427-113a-356a-bace-ed4d51ddcb05",
-        }
-        for name, url in tqdm(urls.items()):
-            download_file(url, self.zip_path(name), leave=False)
+        download_file(
+            "https://datosabiertos.mineduc.cl/wp-content/uploads/2025/11/"
+            "Directorio-Oficial-EE-2025.rar",
+            self.escolar_rar_path,
+        )
+        download_file(
+            "https://www.geoportal.cl/geoportal/catalog/download/"
+            "0dde8427-113a-356a-bace-ed4d51ddcb05",
+            self.superior_zip_path,
+        )
 
     def clean(self):
-        filenames = {
-            "parvularia": "layer_establecimientos_educacion_parvularia_20220309024143.shp",
-            "escolar": "layer_establecimientos_educacion_escolar_20220309024120.shp",
-            "superior": "layer_establecimientos_de_educacion_superior_20220309024111.shp",
-        }
-        clean_functions: dict[
-            str, Callable[[gpd.GeoDataFrame], gpd.GeoDataFrame]
-        ] = {
-            "parvularia": self._clean_parvularia,
-            "escolar": self._clean_escolar,
-            "superior": self._clean_superior,
-        }
-        interim_path = INTERIM_DATA_PATH / "amenities" / "educacion"
         gpkg_path = PROCESSED_DATA_PATH / "amenities" / "educacion.gpkg"
 
-        print("Extrayendo ZIPs...")
-        for name in filenames.keys():
-            unzip(self.zip_path(name), interim_path)
+        gdf_escolar = self._clean_parvularia_escolar()
+        gdf_superior = self._clean_superior()
 
         print("Creando archivo GeoPackage...")
         makedir(gpkg_path, is_file=True, remove_if_exists=True)
-        for name, clean in clean_functions.items():
-            gdf = _clean_ide_dataset_numbers(interim_path / filenames[name])
-            cleaned_gdf = clean(gdf)
-            cleaned_gdf.to_file(gpkg_path, layer=name, driver="GPKG")
+        gdf_escolar.to_file(
+            gpkg_path, layer="parvularia_escolar", driver="GPKG"
+        )
+        gdf_superior.to_file(gpkg_path, layer="superior", driver="GPKG")
 
 
 class MakeAreasVerdes(MakeDataset):
@@ -655,9 +741,8 @@ class MakeFeriasLibres(MakeDataset):
         ferias_gdf = gpd.GeoDataFrame(
             ferias_df,
             geometry=gpd.points_from_xy(
-                ferias_df["Longitud"], ferias_df["Latitud"]
+                ferias_df["Longitud"], ferias_df["Latitud"], crs=4326
             ),
-            crs=4326,
         )
         gpkg_path = PROCESSED_DATA_PATH / "amenities" / "ferias_libres.gpkg"
         makedir(gpkg_path, is_file=True, remove_if_exists=True)
