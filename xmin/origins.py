@@ -89,9 +89,9 @@ class Origins:
                     extensive_variables=["population"],
                 )
                 .to_crs(4326)
-                .rename_axis("id")
-                .reset_index()
             )
+
+        h3_grid = h3_grid.rename_axis("id").reset_index()
 
         return cls(regions, h3_resolution, h3_grid)
 
