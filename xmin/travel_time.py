@@ -175,7 +175,7 @@ class TravelTimeMatrices:
         osm_path: str | Path,
         snap_to_network: str | bool = False,
         snap_street_mode: r5py.TransportMode | str = r5py.TransportMode.CAR,
-        chunk_size: int | None = 50,
+        chunk_size: int | None = 32,
         **kwargs,
     ) -> "TravelTimeMatrices":
         """
@@ -207,7 +207,7 @@ class TravelTimeMatrices:
         snap_street_mode : str or r5py.TransportMode, default: TransportMode.CAR
             Modo de transporte que deben aceptar los caminos disponibles para
             el "snapping". Irrelevante si no se aplica "snapping".
-        chunk_size : int or None, default: None
+        chunk_size : int or None, default: 32
             Cantidad de orígenes que se pasarán a `r5py.TravelTimeMatrix` en
             cada *chunk*. Cada *chunk* es una ejecución nueva de
             `r5py.TravelTimeMatrix`, por lo que se pierde un poco de eficiencia
