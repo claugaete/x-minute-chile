@@ -35,13 +35,17 @@ def seconds_to_gtfs_time(total_seconds: float) -> str:
     return f"{time[0]}:{time[1]}:{time[2]}"
 
 
-def clean_gtfs_frequencies(inpath: str | Path, outpath: str | Path):
+def clean_gtfs_frequencies(
+    inpath: str | Path, outpath: str | Path, chunk_size: int = 50_000
+):
     """
     Limpia un archivo GTFS, eliminando `frequencies.txt` y modificando
     `stop_times.txt` y `trips.txt`, dejando un GTFS con igual comportamiento.
     Esto hace el archivo más pesado, pero mucho más eficiente a la hora de
-    computar matrices de tiempo de viaje mediante r5py. También se elimina
-    `shapes.txt` al no utilizarse.
+    computar matrices de tiempo de viaje mediante r5py.
+
+    También se elimina `shapes.txt` al no utilizarse, y se formatea `stops.txt`
+    para que todos los paraderos tengan nombre.
 
     Código de Danny Whalen, extraído de:
     https://gist.github.com/invisiblefunnel/6c9f3a9b537d3f0ad192c24777b6ae57
@@ -52,6 +56,12 @@ def clean_gtfs_frequencies(inpath: str | Path, outpath: str | Path):
         Ruta de archivo GTFS a modificar.
     outpath : str or Path
         Ruta de archivo GTFS modificado.
+    chunk_size : int, default: 50_000
+        Número de viajes a agrupar por chunk para el cálculo de los nuevos
+        archivos `stop_times.txt` y `trips.txt`. Cada chunk se convierte en un
+        DataFrame y luego estos se concatenan para generar los archivos
+        finales; si la función falla por falta de memoria, se recomienda
+        disminuir `chunk_size`.
     """
 
     feed = ptg.load_feed(inpath)
@@ -87,43 +97,71 @@ def clean_gtfs_frequencies(inpath: str | Path, outpath: str | Path):
 
     # assign new trips (each with their unique id) and corresponding stops
     print("(3/4) Agregando viajes nuevos a GTFS...")
-    new_trips = []
-    new_stop_times = []
-    for i, ftrip in enumerate(freq_trips, start=1):
-        new_trips.append(copy(trips_by_id[ftrip["trip_id"]]))
-        new_trips[-1]["trip_id"] = i  # override trip_id
+    total = len(freq_trips)
+    trips_chunks: list[pd.DataFrame] = []
+    stop_times_chunks: list[pd.DataFrame] = []
 
-        stops, times = trip_patterns[ftrip["trip_id"]]
-        for j in range(len(stops)):
-            t = seconds_to_gtfs_time(times[j] + ftrip["start"])
-            new_stop_times.append(
-                {
-                    "trip_id": i,
-                    "stop_id": stops[j],
-                    "arrival_time": t,
-                    "departure_time": t,
-                    "stop_sequence": j + 1,
-                }
-            )
+    for chunk_start in range(0, total, chunk_size):
+        chunk = freq_trips[chunk_start : min(chunk_start + chunk_size, total)]
+
+        trips_rows = []
+        stop_times_rows = []
+
+        for i, ftrip in enumerate(chunk):
+            new_trip = copy(trips_by_id[ftrip["trip_id"]])
+            new_trip["trip_id"] = chunk_start + i
+            trips_rows.append(new_trip)
+
+            stops, times = trip_patterns[ftrip["trip_id"]]
+            base = ftrip["start"]
+            for j, (stop, t) in enumerate(zip(stops, times), start=1):
+                gt = seconds_to_gtfs_time(t + base)
+                stop_times_rows.append(
+                    {
+                        "trip_id": chunk_start + i,
+                        "stop_id": stop,
+                        "arrival_time": gt,
+                        "departure_time": gt,
+                        "stop_sequence": j,
+                    }
+                )
+
+        trips_chunks.append(pd.DataFrame(trips_rows))
+        stop_times_chunks.append(pd.DataFrame(stop_times_rows))
+
+    # get trips and stop times that aren't in frequencies.txt
+    raw_feed = ptg.load_raw_feed(inpath)
+    freq_trip_ids = set(raw_feed.frequencies["trip_id"])
+    all_trip_ids = set(raw_feed.trips["trip_id"])
+    diff_trip_ids = all_trip_ids.difference(freq_trip_ids)
+    missing_trips_df = raw_feed.trips[raw_feed.trips["trip_id"].isin(diff_trip_ids)]
+    missing_stop_times_df = raw_feed.stop_times[raw_feed.stop_times["trip_id"].isin(diff_trip_ids)]
+
+    # assign names to stops that lack them
+    stops_df = raw_feed.stops
+    stops_df["stop_name"] = stops_df["stop_name"].fillna(stops_df["stop_id"])
+    
+    trips_df = pd.concat(trips_chunks + [missing_trips_df], ignore_index=True)
+    stop_times_df = pd.concat(stop_times_chunks + [missing_stop_times_df], ignore_index=True)
+    del trips_chunks, stop_times_chunks, freq_trips
 
     print("(4/4) Escribiendo archivos...")
-    trips_df = pd.DataFrame(new_trips)
-    stop_times_df = pd.DataFrame(new_stop_times)
 
-    new_feed = ptg.load_raw_feed(inpath)
-    new_feed.set("trips.txt", trips_df)
-    new_feed.set("stop_times.txt", stop_times_df)
+    raw_feed.set("trips.txt", trips_df)
+    raw_feed.set("stop_times.txt", stop_times_df)
+    raw_feed.set("stops.txt", stops_df)
 
     # remove unneeded files
-    new_feed.set("frequencies.txt", ptg.utilities.empty_df())
-    new_feed.set("shapes.txt", ptg.utilities.empty_df())
+    raw_feed.set("frequencies.txt", ptg.utilities.empty_df())
+    raw_feed.set("shapes.txt", ptg.utilities.empty_df())
 
-    ptg.writers.write_feed_dangerously(new_feed, str(outpath))
+    ptg.writers.write_feed_dangerously(raw_feed, str(outpath))
 
 
-def clean_gtfs_shapes(inpath: str | Path, outpath: str | Path):
+def clean_gtfs_basic(inpath: str | Path, outpath: str | Path):
     """
-    Limpia un archivo GTFS, eliminando `shapes.txt` al no utilizarse.
+    Limpia un archivo GTFS, eliminando `shapes.txt` al no utilizarse, y
+    formateando `stops.txt` para que todos los paraderos tengan nombre.
 
     Parameters
     ---
@@ -134,5 +172,11 @@ def clean_gtfs_shapes(inpath: str | Path, outpath: str | Path):
     """
 
     new_feed = ptg.load_raw_feed(inpath)
+
+    # agregar nombre a las stops que no lo tienen (zonas intermedias)
+    stops_df = new_feed.stops
+    stops_df["stop_name"] = stops_df["stop_name"].fillna(stops_df["stop_id"])
+
+    new_feed.set("stops.txt", stops_df)
     new_feed.set("shapes.txt", ptg.utilities.empty_df())
     ptg.writers.write_feed_dangerously(new_feed, str(outpath))

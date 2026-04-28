@@ -18,7 +18,7 @@ from tqdm.auto import tqdm
 
 from xmin.config import config
 from xmin.dataset.download import download_file, makedir
-from xmin.dataset.gtfs import clean_gtfs_frequencies, clean_gtfs_shapes
+from xmin.dataset.gtfs import clean_gtfs_basic, clean_gtfs_frequencies
 from xmin.dataset.parks import clean_parks
 
 DATA_PATH = Path(__file__).parent.resolve() / ".." / "data"
@@ -257,7 +257,7 @@ class MakeGtfsRegional(MakeDataset):
         pbar = tqdm(self.regions.keys())
         for name in pbar:
             pbar.set_description(f"{name}.zip")
-            clean_gtfs_shapes(
+            clean_gtfs_basic(
                 RAW_DATA_PATH / "gtfs" / f"{name}.zip",
                 PROCESSED_DATA_PATH / "gtfs" / f"{name}.zip",
             )
