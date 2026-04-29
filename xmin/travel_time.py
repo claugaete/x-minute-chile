@@ -148,23 +148,44 @@ class TravelTimeMatrices:
 
     Parameters
     ---
-    origins: Origins
+    origins : Origins
         Orígenes desde los cuales se calcularon los tiempos de viaje.
-    matrices: dict[Amenity, DataFrame]
-        Un diccionario cuyas llaves son las distintas `Amenities`, y los
-        valores son las matrices de tiempo de viaje desde cada origen (columna
-        `from_id`) a cada destino que posee la `Amenity` (columna `to_id`). El
-        tiempo de viaje `travel_time` es un valor entero representando el
-        tiempo de viaje en minutos, y es `None` si el tiempo de viaje es mayor
-        al tiempo máximo permitido.
+    amenities : list[Amenity]
+        Las distintas necesidades para las cuales se calculan tiempos de viaje.
+    matrices : dict[Amenity, DataFrame]
+        Un diccionario cuyas llaves son los nombres de las distintas
+        `Amenities`, y los valores son las matrices de tiempo de viaje desde
+        cada origen (columna `from_id`) a cada destino que posee la `Amenity`
+        (columna `to_id`). El tiempo de viaje `travel_time` es un valor entero
+        representando el tiempo de viaje en minutos, y es `None` si el tiempo
+        de viaje es mayor al tiempo máximo permitido.
     """
 
     def __init__(
-        self, origins: Origins, matrices: dict[Amenity, pd.DataFrame]
+        self,
+        origins: Origins,
+        amenities: list[Amenity],
+        matrices: dict[str, pd.DataFrame],
     ):
 
         self._origins = origins
+        self._amenities = {amenity.name: amenity for amenity in amenities}
         self._matrices = matrices
+
+    @property
+    def origins(self) -> Origins:
+        """Orígenes desde los cuales se calcularon los tiempos de viaje."""
+        return self._origins
+
+    @property
+    def amenities(self) -> dict[str, Amenity]:
+        """Necesidades para las cuales se calcularon los tiempos de viaje."""
+        return self._amenities
+
+    @property
+    def matrices(self) -> dict[str, pd.DataFrame]:
+        """Matrices de tiempo de viaje para cada necesidad."""
+        return self._matrices
 
     @classmethod
     def compute(
@@ -266,54 +287,48 @@ class TravelTimeMatrices:
 
         # split matrix by amenities
         matrices = {
-            amenity: travel_time_matrix[
+            amenity.name: travel_time_matrix[
                 travel_time_matrix["_amenity_id"] == amenity.name
             ].drop(columns="_amenity_id")
             for amenity in amenities
         }
 
-        return cls(origins, matrices)
+        return cls(origins, amenities, matrices)
 
-    def group_amenity_destinations(
-        self, amenity: Amenity, group_col: str
-    ) -> Amenity:
+    def group_amenity_destinations(self, amenity_name: str, group_col: str):
         """
         Agrupa destinos dentro de una necesidad según la columna `group_col`,
         considerando el menor tiempo de viaje dentro de los destinos
         individuales como el tiempo de viaje al destino agrupado (para cada
         origen). Modifica el objeto `TravelTimeMatrices`, quitando la matriz de
-        `amenity` y reemplazándola por la nueva matriz agrupada, la cual asigna
-        a un nuevo objeto `Amenity`.
+        `amenity_name` y reemplazándola por la nueva matriz agrupada.
 
-        Retorna el nuevo objeto `Amenity`, que es utilizado como llave para
-        acceder a la nueva matriz. El peso de los destinos en el `Amenity`
-        agrupado es la suma de los pesos originales que fueron asignados al
-        destino; la geometría de cada nuevo destino es el centroide de los
-        destinos originales.
+        También guarda en `TravelTimeMatrices.amenities` el nuevo objeto
+        `Amenity` agrupado. El peso de los destinos en el `Amenity` agrupado es
+        la suma de los pesos originales que fueron asignados al destino; la
+        geometría de cada nuevo destino es el centroide de los destinos
+        originales.
 
         Parameters
         ---
-        amenity : Amenity
-            Necesidad cuyos destinos se buscan agrupar. Esta necesidad será
-            eliminada de las llaves de `TravelTimeMatrices.matrices` y será
-            reemplazada por una nueva necesidad (retornada por el método).
+        amenity_name : str
+            Nombre de la necesidad cuyos destinos se buscan agrupar. Esta
+            necesidad será eliminada de `TravelTimeMatrices.amenities` y será
+            reemplazada por una nueva necesidad.
         group_col : str
             Columna de `amenity.amenity_gdf` que será utilizada para agrupar
             los destinos.
-
-        Returns
-        ---
-        El nuevo objeto `Amenity`, que es utilizado como llave en
-        `TravelTimeMatrices.matrices` para acceder a la nueva matriz creada.
         """
 
-        if amenity not in self.matrices.keys():
+        if amenity_name not in self.matrices.keys():
             raise ValueError(
-                f"{amenity} no está en el objeto TravelTimeMatrices."
+                f"{amenity_name} no está en el objeto TravelTimeMatrices."
             )
 
-        assigned_ttm = self.matrices[amenity].merge(
-            amenity.amenity_gdf[["id", group_col]],
+        amenity = self._amenities[amenity_name]
+
+        assigned_ttm = self.matrices[amenity_name].merge(
+            amenity[["id", group_col]],
             left_on="to_id",
             right_on="id",
         )
@@ -322,7 +337,7 @@ class TravelTimeMatrices:
             .min()
             .reset_index()
             .rename(columns={group_col: "to_id"})
-        ).assign(to_id=lambda df: amenity.name + "/" + df["to_id"])
+        ).assign(to_id=lambda df: amenity_name + "/" + df["to_id"])
         grouped_gdf = (
             gpd.GeoDataFrame(
                 amenity.amenity_gdf.groupby([group_col])[
@@ -344,21 +359,8 @@ class TravelTimeMatrices:
             .rename(columns={group_col: "id"})
         )
         grouped_gdf["name"] = grouped_gdf["id"]
-        new_amenity = Amenity(amenity.name, grouped_gdf)
-        self._matrices[new_amenity] = grouped_ttm
-        self._matrices.pop(amenity)
-
-        return new_amenity
-
-    @property
-    def origins(self) -> Origins:
-        """Orígenes desde los cuales se calcularon los tiempos de viaje."""
-        return self._origins
-
-    @property
-    def matrices(self) -> dict[Amenity, pd.DataFrame]:
-        """Matrices de tiempo de viaje para cada necesidad."""
-        return self._matrices
+        self._matrices[amenity_name] = grouped_ttm
+        self._amenities[amenity_name] = Amenity(amenity_name, grouped_gdf)
 
 
 def merge_ttms(
@@ -372,8 +374,9 @@ def merge_ttms(
     ---
     ttms : list[TravelTimeMatrices]
         Lista de grupos de matrices de tiempos de viaje que se desean unir.
-        Deben tener el mismo conjunto de orígenes. Si hay una misma necesidad
-        calculada en dos o más elementos, se utilizará la del último elemento.
+        Deben tener el mismo conjunto de orígenes. Si hay dos necesidades que
+        comparten el mismo nombre en distintos grupos de matrices, se utilizará
+        la del último grupo.
 
     Returns
     ---
@@ -388,11 +391,12 @@ def merge_ttms(
             "del mismo objeto `Origins`."
         )
 
-    # combine matrices dicts and check for duplicate amenity names (giving
-    # warning)
-    matrices: dict[Amenity, pd.DataFrame] = reduce(
+    # combine matrices dicts
+    matrices: dict[str, pd.DataFrame] = reduce(
         operator.ior, iter(ttm.matrices for ttm in ttms), {}
     )
-    _check_duplicate_amenities(matrices.keys())
+    amenities: dict[str, Amenity] = reduce(
+        operator.ior, iter(ttm.amenities for ttm in ttms), {}
+    )
 
-    return TravelTimeMatrices(origins, matrices)
+    return TravelTimeMatrices(origins, amenities, matrices)

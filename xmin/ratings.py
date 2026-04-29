@@ -1,3 +1,4 @@
+from typing import TypeVar
 import warnings
 
 import geopandas as gpd
@@ -9,7 +10,15 @@ from .amenities import Amenity
 from .geometry import to_centroids
 from .indices import IndexFunction
 from .origins import Origins
+from .travel_time import TravelTimeMatrices
 from .visualization import AccessibilityVisualizer
+
+V = TypeVar("V")
+
+
+def _convert_amenities_to_names(d: dict[Amenity | str, V]) -> dict[str, V]:
+    """Toma un diccionario y convierte las llaves que son `Amenity` a `str`."""
+    return {(k.name if isinstance(k, Amenity) else k): v for k, v in d.items()}
 
 
 class AccessibilityRatings:
@@ -22,6 +31,9 @@ class AccessibilityRatings:
     ---
     origins : Origins
         Orígenes desde los cuales se calcularon los índices.
+    amenities : list[Amenity]
+        Las distintas necesidades usadas como destinos en el cálculo de los
+        índices.
     weights : dict[Amenity, float]
         Pesos relativos de las necesidades que fueron usados para la
         ponderación de la accesibilidad global.
@@ -34,20 +46,27 @@ class AccessibilityRatings:
     def __init__(
         self,
         origins: Origins,
-        weights: dict[Amenity, float],
+        amenities: list[Amenity],
+        weights: dict[Amenity | str, float],
         gdf: gpd.GeoDataFrame,
     ):
         self._origins = origins
-        self._weights = weights
+        self._amenities = {amenity.name: amenity for amenity in amenities}
+        self._weights = _convert_amenities_to_names(weights)
         self._gdf = gdf
         self._visualize = AccessibilityVisualizer(
-            self._gdf, self._origins, self._weights
+            self._gdf, self._origins, self._amenities, self._weights
         )
 
     @property
     def origins(self) -> Origins:
         """Orígenes desde los cuales se calculó la accesibilidad."""
         return self._origins
+
+    @property
+    def amenities(self) -> dict[str, Amenity]:
+        """Necesidades para las cuales se calculó la accesibilidad."""
+        return self._amenities
 
     @property
     def weights(self) -> dict[Amenity, float]:
@@ -67,10 +86,9 @@ class AccessibilityRatings:
     @classmethod
     def compute(
         cls,
-        origins: Origins,
-        time_travel_matrices: dict[Amenity, pd.DataFrame],
-        index_function: IndexFunction | dict[Amenity, IndexFunction],
-        weights: dict[Amenity, float] | None = None,
+        travel_time_matrices: TravelTimeMatrices,
+        index_function: IndexFunction | dict[Amenity | str, IndexFunction],
+        weights: dict[Amenity | str, float] | None = None,
     ) -> "AccessibilityRatings":
         """
         Calcula los índices de accesibilidad y retorna una instancia de
@@ -78,64 +96,75 @@ class AccessibilityRatings:
 
         Parameters
         ---
-        origins : Origins
-            Orígenes para los cuales se calculará el índice de accesibilidad.
-        time_travel_matrices : dict[Amenity, DataFrame]
-            Matrices de viaje desde cada origen hacia los distintos destinos,
-            separado según la necesidad que cubre cada destino.
-        index_function : IndexFunction or dict[Amenity, IndexFunction]
+        time_travel_matrices : TravelTimeMatrices
+            Objeto que guarda las matrices de viaje desde cada origen hacia los
+            distintos destinos.
+        index_function : IndexFunction or dict[Amenity | str, IndexFunction]
             Funcion(es) para calcular los índices de accesibilidad de las
             distintas necesidades. Si se recibe una IndexFunction, se aplicará
             la misma para todas las Amenities. Si se recibe un diccionario, se
-            asocia cada Amenity con su función a utilizar para el cálculo de su
-            índice.
-        weights : dict[Amenity, float] or None, default: None
-            Pesos relativos de las distintas necesidades. El índice final se
-            calcula ponderando los índices de las distintas necesidades
-            utilizando estos pesos. Si no se entregan pesos, todos los índices
-            tendrán el mismo peso.
+            asocia cada necesidad con su función a utilizar para el cálculo de
+            su índice. Las llaves del diccionario pueden ser los objetos
+            `Amenity` o sus nombres.
+        weights : dict[Amenity | str, float] or None, default: None
+            Pesos relativos de las distintas necesidades. Las llaves pueden ser
+            los objetos `Amenity` o sus nombres. El índice final se calcula
+            ponderando los índices de las distintas necesidades utilizando
+            estos pesos. Si no se entregan pesos, todos los índices tendrán el
+            mismo peso.
         """
 
-        population = origins.h3_grid.set_index("id")["population"]
+        origins = travel_time_matrices.origins
+        amenities = travel_time_matrices.amenities
+        matrices = travel_time_matrices.matrices
 
-        amenity_index_values: dict[Amenity, pd.Series] = {}
+        population = origins.h3_grid.set_index("id")["population"]
         ratings_gdf = origins.h3_grid.set_index("id")[["geometry"]]
+        amenities_with_index: list[str] = []
+
+        # replace Amenity keys with strings if index_function is a dict
+        # if not, assign same function to all amenities
+        if isinstance(index_function, dict):
+            index_function = _convert_amenities_to_names(index_function)
+        else:
+            index_function = {
+                name: index_function for name in amenities.keys()
+            }
+
+        # replace Amenity keys with strings if weights is a dict
+        # if not, assign same weight to all amenities that have an index
+        # function
+        if isinstance(weights, dict):
+            weights = _convert_amenities_to_names(weights)
+        else:
+            weights = {k: 1 for k in index_function.keys()}
 
         # calcular el índice particular de cada necesidad
         print("Calculando índices para cada necesidad...")
-        for amenity, ttm in tqdm(time_travel_matrices.items()):
+        for name, amenity in tqdm(amenities.items()):
+            ttm = matrices[name]
             amenity_gdf = amenity.amenity_gdf.set_index("id")
-            current_index = (
-                index_function.get(amenity)
-                if isinstance(index_function, dict)
-                else index_function
-            )
+            current_index = index_function.get(name)
             if current_index is None:
                 warnings.warn(
-                    f'Amenity "{amenity.name}" no tiene una función de índice '
+                    f'Amenity "{name}" no tiene una función de índice '
                     "asociada en `index_function`. No se considerará la "
-                    "necesidad en el cálculo del índice final."
+                    "necesidad en el cálculo del índice."
                 )
             else:
-                amenity_index_values[amenity] = current_index.calculate_index(
+                ratings_gdf[name] = current_index.calculate_index(
                     ttm, population, amenity_gdf["weight"]
                 )
-                ratings_gdf[amenity.name] = amenity_index_values[amenity]
-
-        # asignamos pesos equilibrados si no se indica lo contrario
-        if weights is None:
-            weights = {k: 1 for k in amenity_index_values.keys()}
+                amenities_with_index.append(name)
 
         # arreglamos discrepancias entre índices calculados y pesos recibidos
-        amenities_with_no_weight = set(amenity_index_values.keys()).difference(
+        amenities_with_no_weight = set(amenities_with_index).difference(
             weights.keys()
         )
         if amenities_with_no_weight:
             warnings.warn(
                 "Las siguientes Amenities no tienen un peso asociado: "
-                + ", ".join(
-                    amenity.name for amenity in amenities_with_no_weight
-                )
+                + ", ".join(name for name in amenities_with_no_weight)
                 + ". Su peso será considerado como 0. Para evitar este "
                 "warning, asigna un peso a las necesidades (puede ser 0 si no "
                 "deseas incluirlas en el cálculo final)."
@@ -144,29 +173,27 @@ class AccessibilityRatings:
             weights[amenity] = 0
 
         weights_with_no_index = set(weights.keys()).difference(
-            amenity_index_values.keys()
+            amenities_with_index
         )
         if weights_with_no_index:
             warnings.warn(
                 "Las siguientes Amenities tienen un peso asociado, pero no se "
                 "les calculó un índice: "
-                + ", ".join(amenity.name for amenity in weights_with_no_index)
+                + ", ".join(name for name in weights_with_no_index)
                 + ". Estas Amenities serán ignoradas. Para evitar este "
                 "warning, asigna un índice a cada necesidad."
             )
-        for amenity in weights_with_no_index:
-            weights.pop(amenity, None)
+        for name in weights_with_no_index:
+            weights.pop(name, None)
 
         # ponderamos índices para obtener el final
         weight_sum = sum(weights.values())
         ratings_gdf["total"] = 0
 
-        for amenity, weight in weights.items():
-            ratings_gdf["total"] += (
-                amenity_index_values[amenity] * weight / weight_sum
-            )
+        for name, weight in weights.items():
+            ratings_gdf["total"] += ratings_gdf[name] * weight / weight_sum
 
-        return cls(origins, weights, ratings_gdf)
+        return cls(origins, amenities.values(), weights, ratings_gdf)
 
     def crop(
         self,
@@ -225,7 +252,9 @@ class AccessibilityRatings:
         # a las celdas nuevas les asignamos los ratings antiguos
         new_ratings = self.gdf.reindex(new_grid_indexed.index)
 
-        return AccessibilityRatings(new_origins, self.weights, new_ratings)
+        return AccessibilityRatings(
+            new_origins, self.amenities.values(), self.weights, new_ratings
+        )
 
     def aggregate(
         self, new_resolution: int, weighted: bool = False
@@ -310,4 +339,6 @@ class AccessibilityRatings:
             averaged_accs, geometry="geometry", crs=self.gdf.crs
         )
 
-        return AccessibilityRatings(new_origins, self.weights, new_gdf)
+        return AccessibilityRatings(
+            new_origins, self.amenities.values(), self.weights, new_gdf
+        )

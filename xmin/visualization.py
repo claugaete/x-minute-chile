@@ -125,10 +125,10 @@ class OverlayConfig:
     ---
     show_borders : bool, default: True
         Si se mostrarán las fronteras de las regiones del análisis.
-    show_amenities : bool | list[Amenity], default: False
+    show_amenities : bool | list[Amenity | str], default: False
         Si se mostrarán los destinos asociados a las distintas necesidades
-        consideradas. Si se recibe una lista de objetos Amenity, se mostrarán
-        los destinos asociados a esos objetos.
+        consideradas. Si se recibe una lista de necesidades, se mostrarán los
+        destinos asociados a esas necesidades.
     show_roads : bool, default: False
         Si se mostrarán caminos para contextualizar la región de análisis.
     borders_kwds : dict, default: {}
@@ -151,7 +151,7 @@ class OverlayConfig:
     """
 
     show_borders: bool = True
-    show_amenities: bool | list[Amenity] = False
+    show_amenities: bool | list[Amenity | str] = False
     show_roads: bool = False
     borders_kwds: dict = field(default_factory=dict)
     amenities_kwds: dict = field(default_factory=dict)
@@ -171,7 +171,9 @@ class AccessibilityVisualizer:
         GeoDataFrame con los ratings del área a analizar.
     origins : Origins
         Orígenes representando el área a analizar.
-    weights : dict[Amenity, float]
+    amenities: dict[str, Amenity]
+        Necesidades que fueron incluidas en el análisis.
+    weights : dict[str, float]
         Pesos relativos de las distintas necesidades para el cálculo del índice
         "total" de `gdf`.
     """
@@ -180,10 +182,12 @@ class AccessibilityVisualizer:
         self,
         gdf: gpd.GeoDataFrame,
         origins: Origins,
-        weights: dict[Amenity, float],
+        amenities: dict[str, Amenity],
+        weights: dict[str, float],
     ):
         self._gdf = gdf
         self._origins = origins
+        self._amenities = amenities
         self._weights = weights
 
     @staticmethod
@@ -264,10 +268,19 @@ class AccessibilityVisualizer:
                 raise ValueError("`show_amenities` es una lista vacía.")
             else:
                 amenities_to_plot = self._get_destinations(
-                    overlay_cfg.show_amenities
+                    [
+                        (
+                            amenity
+                            if isinstance(amenity, Amenity)
+                            else self._amenities[amenity]
+                        )
+                        for amenity in overlay_cfg.show_amenities
+                    ]
                 )
         elif overlay_cfg.show_amenities:
-            amenities_to_plot = self._get_destinations(self._weights.keys())
+            amenities_to_plot = self._get_destinations(
+                self._amenities.values()
+            )
 
         if overlay_cfg.show_roads and not overlay_cfg.roads_gdf:
             if overlay_cfg.roads_pbf_path:
@@ -719,12 +732,8 @@ class AccessibilityVisualizer:
         valor de `interactive`).
         """
 
-        weights_by_name = {
-            amenity.name: weight for amenity, weight in self._weights.items()
-        }
-
         urgency_df = self._gdf.drop(columns=["total", "geometry"]).apply(
-            lambda rating: weights_by_name[rating.name] * (1 - rating)
+            lambda rating: self._weights[rating.name] * (1 - rating)
         )
         urgency_df["N/A"] = urgency_df.sum(axis=1) == 0
         categories = urgency_df.columns
