@@ -289,7 +289,7 @@ class EnhancedTwoStepFca(IndexFunction):
                     amenity_weights.loc[dests_in_catchment]
                     * inverse_populations.loc[dests_in_catchment]
                 )
-                accessibility += ratios_in_catchment * weight
+                accessibility += ratios_in_catchment.sum() * weight
             return accessibility
 
         unclipped_2sfca = (
