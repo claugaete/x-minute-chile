@@ -1,4 +1,4 @@
-from .amenities import Amenity, osm_amenity
+from .amenities import Amenity
 from .config import config
 from .origins import Origins
 from .ratings import AccessibilityRatings
@@ -8,7 +8,6 @@ from .visualization import OverlayConfig
 __all__ = [
     "Amenity",
     "config",
-    "osm_amenity",
     "Origins",
     "AccessibilityRatings",
     "TravelTimeMatrices",

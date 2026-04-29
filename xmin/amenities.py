@@ -86,6 +86,80 @@ class Amenity:
             )
             # if not, convert to centroids
             self._amenity_gdf = to_centroids(self._amenity_gdf)
+    
+    @classmethod        
+    def from_osm(
+        cls,
+        name: str,
+        osm_path: str | Path,
+        osm_filter: dict,
+        keep_all_tags: bool | list[str] = True,
+        bounds: BaseGeometry | None = None,
+        use_area_as_weight: bool = False,
+        area_to_weight_function: Callable[[float], float] = lambda x: x,
+    ) -> "Amenity":
+        """
+        Crea una `Amenity` con puntos generados programáticamente a partir de
+        un filtro de POIs de OSM.
+
+        Parameters
+        ---
+        name : str
+            Nombre de la necesidad
+        osm_path : Path or str
+            Ruta al archivo PBF de OSM del cual extraer los POIs.
+        osm_filter : dict
+            Diccionario con el filtro que se va a pasar a OSM para obtener las
+            categorías correspondientes a la necesidad. Por ejemplo, para
+            centros de salud, se podría utilizar el filtro `{"amenity":
+            ["hospital", "clinic"]}`. Para más información sobre categorías
+            existentes, visitar
+            https://wiki.openstreetmap.org/wiki/Map_features.
+        keep_all_tags : bool, default: True
+            Si es verdadero, se guarda cada etiqueta en su propia columna del
+            GeoDataFrame. Si es falso, se eliminan las etiquetas asociadas a
+            cada POI (lo cual hace el GeoDataFrame más ligero). Si es una
+            lista, solo se guardan las etiquetas incluidas en la lista.
+        bounds : BaseGeometry or None, default: None
+            Polígono dentro del cual se desean buscar los POIs en OSM. Si no se
+            especifica, se buscarán puntos en toda la geometría del archivo
+            PBF.
+        use_area_as_weight : bool, default: False
+            Booleano indicando si se utiliza el área de los POIs obtenidos en
+            OSM como referencia para obtener el peso de cada uno.
+        area_to_weight_function : (float) -> float, default: identity
+            Función a utilizar para convertir el área de cada POI en su peso.
+            Es importante considerar que algunos POIs podrían ser puntos (no
+            polígonos), y por ende tener área 0. Podría ser necesario
+            considerar este caso borde a la hora de convertir áreas a pesos (si
+            se utiliza la función identidad, estos puntos tendrían peso 0 y
+            podrían no afectar al resultado final).
+
+        Returns
+        ---
+        Un objeto `Amenity` correspondiente a la necesidad.
+        """
+
+        amenity_gdf: gpd.GeoDataFrame = (
+            qosm.convert_pbf_to_geodataframe(
+                osm_path,
+                tags_filter=osm_filter,
+                working_directory=config.quackosm_working_directory,
+                geometry_filter=bounds,
+                keep_all_tags=False if not keep_all_tags else True,
+                explode_tags=True,
+            )
+            .rename_axis("id")
+            .reset_index()
+        )
+        if isinstance(keep_all_tags, list):
+            amenity_gdf = amenity_gdf[["id"] + keep_all_tags + ["geometry"]]
+        if use_area_as_weight:
+            amenity_gdf["weight"] = amenity_gdf.to_crs(
+                config.projected_crs
+            ).area.apply(area_to_weight_function)
+
+        return cls(name, to_centroids(amenity_gdf))
 
     @property
     def name(self) -> str:
@@ -96,74 +170,3 @@ class Amenity:
     def amenity_gdf(self) -> gpd.GeoDataFrame:
         """GeoDataFrame con los puntos que satisfacen la necesidad."""
         return self._amenity_gdf
-
-
-def osm_amenity(
-    name: str,
-    osm_path: str | Path,
-    osm_filter: dict,
-    keep_all_tags: bool | list[str] = True,
-    bounds: BaseGeometry | None = None,
-    use_area_as_weight: bool = False,
-    area_to_weight_function: Callable[[float], float] = lambda x: x,
-) -> Amenity:
-    """
-    Crea una `Amenity` con puntos generados programáticamente a partir de un
-    filtro de POIs de OSM.
-
-    Parameters
-    ---
-    name : str
-        Nombre de la necesidad
-    osm_path : Path or str
-        Ruta al archivo PBF de OSM del cual extraer los POIs.
-    osm_filter : dict
-        Diccionario con el filtro que se va a pasar a OSM para obtener las
-        categorías correspondientes a la necesidad. Por ejemplo, para
-        centros de salud, se podría utilizar el filtro `{"amenity":
-        ["hospital", "clinic"]}`. Para más información sobre categorías
-        existentes, visitar https://wiki.openstreetmap.org/wiki/Map_features.
-    keep_all_tags : bool, default: True
-        Si es verdadero, se guarda cada etiqueta en su propia columna del
-        GeoDataFrame. Si es falso, se eliminan las etiquetas asociadas a cada
-        POI (lo cual hace el GeoDataFrame más ligero). Si es una lista, solo se
-        guardan las etiquetas incluidas en la lista.
-    bounds : BaseGeometry or None, default: None
-        Polígono dentro del cual se desean buscar los POIs en OSM. Si no se
-        especifica, se buscarán puntos en toda la geometría del archivo PBF.
-    use_area_as_weight : bool, default: False
-        Booleano indicando si se utiliza el área de los POIs obtenidos en
-        OSM como referencia para obtener el peso de cada uno.
-    area_to_weight_function : (float) -> float, default: identity
-        Función a utilizar para convertir el área de cada POI en su peso.
-        Es importante considerar que algunos POIs podrían ser puntos (no
-        polígonos), y por ende tener área 0. Podría ser necesario
-        considerar este caso borde a la hora de convertir áreas a pesos (si
-        se utiliza la función identidad, estos puntos tendrían peso 0 y
-        podrían no afectar al resultado final).
-
-    Returns
-    ---
-    Un objeto `Amenity` correspondiente a la necesidad.
-    """
-
-    amenity_gdf: gpd.GeoDataFrame = (
-        qosm.convert_pbf_to_geodataframe(
-            osm_path,
-            tags_filter=osm_filter,
-            working_directory=config.quackosm_working_directory,
-            geometry_filter=bounds,
-            keep_all_tags=False if not keep_all_tags else True,
-            explode_tags=True,
-        )
-        .rename_axis("id")
-        .reset_index()
-    )
-    if isinstance(keep_all_tags, list):
-        amenity_gdf = amenity_gdf[["id"] + keep_all_tags + ["geometry"]]
-    if use_area_as_weight:
-        amenity_gdf["weight"] = amenity_gdf.to_crs(
-            config.projected_crs
-        ).area.apply(area_to_weight_function)
-
-    return Amenity(name, to_centroids(amenity_gdf))
