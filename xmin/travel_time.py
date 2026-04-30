@@ -106,6 +106,7 @@ def compute_matrix(
     origins: gpd.GeoDataFrame,
     destinations: gpd.GeoDataFrame,
     chunk_size: int | None,
+    dropna: bool,
     **kwargs,
 ) -> pd.DataFrame:
     """
@@ -130,11 +131,13 @@ def compute_matrix(
         progress_bar = tqdm(total=len(origins))
         result = []
         for origin_chunk in chunk_gdf(origins, chunk_size):
-            result.append(
-                r5py.TravelTimeMatrix(
-                    transport_network, origin_chunk, destinations, **kwargs
-                )
+            ttm = r5py.TravelTimeMatrix(
+                transport_network, origin_chunk, destinations, **kwargs
             )
+            if dropna:
+                ttm = ttm.dropna()
+            result.append(ttm)
+            del ttm
             progress_bar.update(len(origin_chunk))
         progress_bar.close()
         return pd.concat(result, ignore_index=True)
@@ -197,6 +200,7 @@ class TravelTimeMatrices:
         snap_to_network: str | bool = False,
         snap_street_mode: r5py.TransportMode | str = r5py.TransportMode.CAR,
         chunk_size: int | None = 32,
+        dropna: bool = True,
         **kwargs,
     ) -> "TravelTimeMatrices":
         """
@@ -236,6 +240,12 @@ class TravelTimeMatrices:
             poder mostrar una barra de progreso. Si se desea obtener la mayor
             eficiencia (aunque sin barra de progreso), utilizar
             `chunk_size=None`.
+        dropna : bool, default: True
+            Si es verdadero, elimina filas con tiempos de viaje nulos (que son
+            mayores al tiempo máximo permitido por el cálculo). Esto reduce en
+            varios órdenes de magnitud el tamaño del DataFrame resultante
+            (especialmente si se tiene un área urbana grande y tiempos de viaje
+            cortos).
         **kwargs
             Argumentos que serán pasados al cálculo de la TTM. Puede ser
             cualquier argumento que se pueda pasar a `r5py.RegionalTask`
@@ -277,6 +287,7 @@ class TravelTimeMatrices:
             origins=origin_points_gdf,
             destinations=all_amenities,
             chunk_size=chunk_size,
+            dropna=dropna,
             **kwargs,
         )
         travel_time_matrix["_amenity_id"] = travel_time_matrix.merge(

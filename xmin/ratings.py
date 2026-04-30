@@ -156,6 +156,7 @@ class AccessibilityRatings:
                     ttm, population, amenity_gdf["weight"]
                 )
                 amenities_with_index.append(name)
+        ratings_gdf = ratings_gdf.fillna(0)
 
         # arreglamos discrepancias entre índices calculados y pesos recibidos
         amenities_with_no_weight = set(amenities_with_index).difference(
