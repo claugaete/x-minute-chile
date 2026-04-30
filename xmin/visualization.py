@@ -12,6 +12,7 @@ from mapclassify.classifiers import MapClassifier
 import matplotlib as mpl
 from matplotlib.axes import Axes
 from matplotlib.colors import Colormap, ListedColormap
+from matplotlib_map_utils import scale_bar
 import numpy as np
 import pandas as pd
 import quackosm as qosm
@@ -125,6 +126,11 @@ class OverlayConfig:
     ---
     show_borders : bool, default: True
         Si se mostrarán las fronteras de las regiones del análisis.
+    show_scalebar : bool, default: False
+        Si se mostrará una escala gráfica que muestre las distancias en el
+        contexto de la visualización. Solo se considerará este parámetro si la
+        visualización no es interactiva (las visualizaciones interactivas
+        vienen con una escala gráfica propia).
     show_amenities : bool | list[Amenity | str], default: False
         Si se mostrarán los destinos asociados a las distintas necesidades
         consideradas. Si se recibe una lista de necesidades, se mostrarán los
@@ -134,6 +140,12 @@ class OverlayConfig:
     borders_kwds : dict, default: {}
         Diccionario de argumentos que serán pasados al momento de graficar las
         fronteras.
+    scalebar_kwds : dict, default: {}
+        Diccionario de argumentos que serán pasados al momento de graficar la
+        escala gráfica, con la función `scale_bar` de `matplotlib-map-utils`.
+        Solo se considerará este parámetro si la visualización no es
+        interactiva (las visualizaciones interactivas vienen con una escala
+        gráfica propia).
     amenities_kwds : dict, default: {}
         Diccionario de argumentos que serán pasados al momento de graficar las
         necesidades.
@@ -151,9 +163,11 @@ class OverlayConfig:
     """
 
     show_borders: bool = True
+    show_scalebar: bool = False
     show_amenities: bool | list[Amenity | str] = False
     show_roads: bool = False
     borders_kwds: dict = field(default_factory=dict)
+    scalebar_kwds: dict = field(default_factory=dict)
     amenities_kwds: dict = field(default_factory=dict)
     roads_kwds: dict = field(default_factory=dict)
     roads_gdf: gpd.GeoDataFrame | None = None
@@ -298,6 +312,7 @@ class AccessibilityVisualizer:
         col_name = values.name
         gdf_to_plot = self._gdf.copy()
         gdf_to_plot[col_name] = values
+        regions_to_plot = self._origins.regions.copy()
 
         if interactive:
             default_explore_kwds = {"tiles": "CartoDB Voyager"}
@@ -311,7 +326,7 @@ class AccessibilityVisualizer:
                 col_name, **(default_explore_kwds | kwargs)
             )
             if overlay_cfg.show_borders:
-                self._origins.regions.explore(
+                regions_to_plot.explore(
                     m=m, **(default_overlay_kwds | overlay_cfg.borders_kwds)
                 )
             if overlay_cfg.show_amenities:
@@ -324,8 +339,19 @@ class AccessibilityVisualizer:
                 )
             return m
         else:
-            # make sure legend and plot have same alpha by default (they can be
-            # overwritten if needed)
+
+            # for the scalebar to show correct distances, we need to project
+            # the plots
+            if overlay_cfg.show_scalebar:
+                gdf_to_plot = gdf_to_plot.to_crs(config.projected_crs)
+                regions_to_plot = regions_to_plot.to_crs(config.projected_crs)
+                if overlay_cfg.show_amenities:
+                    amenities_to_plot = amenities_to_plot.to_crs(
+                        config.projected_crs
+                    )
+                if overlay_cfg.show_roads:
+                    roads_gdf = roads_gdf.to_crs(config.projected_crs)
+
             default_plot_kwds = {
                 "alpha": (
                     config.alpha_when_roads_shown
@@ -335,6 +361,15 @@ class AccessibilityVisualizer:
             }
 
             default_borders_kwds = {"edgecolor": "black", "facecolor": "none"}
+            default_scalebar_bar_kwds = {
+                "projection": gdf_to_plot.crs,
+                "unit": "km",
+            }
+            default_scalebar_kwds = {
+                "style": "boxes",
+                "bar": default_scalebar_bar_kwds
+                | overlay_cfg.scalebar_kwds.pop("bar", {}),
+            }
             default_roads_kwds = default_borders_kwds | {
                 "linewidth": 0.5,
                 "zorder": -1,
@@ -346,8 +381,13 @@ class AccessibilityVisualizer:
 
             ax = gdf_to_plot.plot(col_name, **(default_plot_kwds | kwargs))
             if overlay_cfg.show_borders:
-                self._origins.regions.plot(
+                regions_to_plot.plot(
                     ax=ax, **(default_borders_kwds | overlay_cfg.borders_kwds)
+                )
+            if overlay_cfg.show_scalebar:
+                scale_bar(
+                    ax=ax,
+                    **(default_scalebar_kwds | overlay_cfg.scalebar_kwds),
                 )
             if overlay_cfg.show_amenities:
                 amenities_to_plot.plot(
