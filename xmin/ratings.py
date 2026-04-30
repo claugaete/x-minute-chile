@@ -281,6 +281,8 @@ class AccessibilityRatings:
         new_resolution : int
             La nueva resolución de H3; no puede ser mayor a la resolución
             actual.
+        weighted : bool, default: False
+            Si ponderar la accesibilidad de cada celda según su población.
 
         Returns
         ---
@@ -293,24 +295,43 @@ class AccessibilityRatings:
                 f"resolución actual ({self.origins.h3_resolution})."
             )
 
-        new_origins = Origins.create_grid(
-            self.origins.regions,
-            new_resolution,
-            population_gdf=to_centroids(self.origins.h3_grid),
+        old_origins = self.origins.h3_grid
+
+        # get new origins (no population data yet)
+        new_origins_no_population = Origins.create_grid(
+            self.origins.regions, new_resolution
         )
 
-        # each old cell gets assigned to the new cell where its centroid falls
+        # map each old cell to the new cell where its centroid falls
         left_gdf = to_centroids(self.gdf)
-        if weighted:
-            left_gdf = left_gdf.join(
-                self.origins.h3_grid.set_index("id")["population"]
+        joined = (
+            left_gdf.sjoin(
+                new_origins_no_population.h3_grid[["id", "geometry"]],
+                how="right",
+                predicate="within",
+                lsuffix="old",
+                rsuffix=None,
             )
-        joined = left_gdf.sjoin(
-            new_origins.h3_grid.drop(columns="population"),
-            how="right",
-            predicate="within",
-            lsuffix="left",
-            rsuffix=None,
+            .drop_duplicates("id_old")
+            .set_index("id_old")
+        )
+        cell_map = joined["id"]
+
+        # assign new population using cell map
+        new_population = (
+            old_origins.assign(id_new=old_origins["id"].map(cell_map))
+            .groupby("id_new")["population"]
+            .sum()
+        )
+        grid_with_population = (
+            new_origins_no_population.h3_grid.set_index("id")
+            .assign(population=new_population)
+            .reset_index()
+        )
+        new_origins = Origins(
+            new_origins_no_population.regions,
+            h3_resolution=new_origins_no_population.h3_resolution,
+            h3_grid=grid_with_population,
         )
 
         # we average the accessibility values
@@ -321,8 +342,10 @@ class AccessibilityRatings:
             ].mean()
         else:
 
+            old_population = old_origins.set_index("id")["population"]
+
             def weighted_average(df: pd.DataFrame):
-                weights = df["population"]
+                weights = old_population.loc[df.index]
                 if weights.sum() == 0:
                     return df[cols_to_agg].mean()
                 return (
@@ -331,7 +354,7 @@ class AccessibilityRatings:
                 )
 
             averaged_accs = joined.groupby(["id", "geometry"])[
-                cols_to_agg + ["population"]
+                cols_to_agg
             ].apply(weighted_average)
 
         averaged_accs = averaged_accs.reset_index().set_index("id")
