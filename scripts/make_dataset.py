@@ -500,14 +500,14 @@ class MakeEducacion(MakeDataset):
                 "3": "Particular Subvencionado",
                 "4": "Particular Pagado",
                 "5": "Corporación de Administración Delegada",
-                "6": "Servicio Local de Educación"
+                "6": "Servicio Local de Educación",
             },
             "COD_DEPE_AGRUPADO": {
                 "1": "Municipal",
                 "2": "Particular Subvencionado",
                 "3": "Particular Pagado",
                 "4": "Corporación de Administración Delegada",
-                "5": "Servicio Local de Educación"
+                "5": "Servicio Local de Educación",
             },
             "ORI_RELIGIOSA": {
                 "1": "Laica",
@@ -517,8 +517,8 @@ class MakeEducacion(MakeDataset):
                 "5": "Judía",
                 "6": "Budista",
                 "7": "Otro",
-                "9": "Sin información"
-            }
+                "9": "Sin información",
+            },
         }
 
         for column, value_dict in value_dicts.items():
@@ -737,7 +737,12 @@ class MakeFeriasLibres(MakeDataset):
     def clean(self):
         print("Creando archivo GeoPackage...")
         ferias_df = pd.read_excel(self.excel_path, sheet_name="Datos")
-        ferias_df = ferias_df.rename(columns={"ID": "id", "NOMBRE": "name"})
+        ferias_df = ferias_df.rename(
+            columns={"ID": "id", "NOMBRE": "name", "N°": "N"}
+        )
+        ferias_df.loc[ferias_df["NUM_PUESTO"] == "Sin Información", "N"] = (
+            pd.NA
+        )
         ferias_gdf = gpd.GeoDataFrame(
             ferias_df,
             geometry=gpd.points_from_xy(
