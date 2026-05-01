@@ -38,6 +38,7 @@ dependencies = [
     "openpyxl>=3.1.5",
     "esda>=2.9.0",
     "matplotlib-map-utils>=4.0.0",
+    "scikit-learn>=1.8.0",
 ]
 requires-python = "~=3.12.0"
 
