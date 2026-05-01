@@ -61,6 +61,8 @@ def extract_osm_subset(
     osmconvert esté instalado en el sistema; si osmconvert no está en el PATH,
     se debe modificar la variable `xmin.osmconvert_path` a la ruta del
     ejecutable.
+    
+    Descarga de osmconvert: https://wiki.openstreetmap.org/wiki/Osmconvert
 
     Parameters
     ---
