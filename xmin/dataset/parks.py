@@ -69,7 +69,7 @@ def clean_parks(
     # some ways in the network are polygons, they need to be converted into
     # lines
     polygons = pedestrian_network.geom_type.isin(["Polygon", "MultiPolygon"])
-    # Convert polygons to their boundary (returns LinearRing / MultiLineString)
+    # convert polygons to their boundary (returns LinearRing / MultiLineString)
     pedestrian_network.loc[polygons, "geometry"] = pedestrian_network.loc[
         polygons, "geometry"
     ].boundary
@@ -91,6 +91,8 @@ def clean_parks(
             )
 
         for geom in geoms.geoms:
+            
+            # generate entry points
             inter = geom.exterior.intersection(pedestrian_network_union)
             if inter.is_empty:
                 entry_points = []
@@ -102,7 +104,12 @@ def clean_parks(
                 raise RuntimeError(
                     f"Intersección con geometría de tipo {inter.geom_type}"
                 )
+                
+            # only add intermediate points if the park is not fenced, or if
+            # there are no entry points
             add_extra_points = not (row[is_fenced_column] and entry_points)
+            
+            # get all representative points and add to results
             representative_points = convert_polygon_to_representative_points(
                 polygon=geom,
                 entry_points=entry_points,
