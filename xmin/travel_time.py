@@ -371,15 +371,44 @@ class TravelTimeMatrices:
         )
         grouped_gdf["name"] = grouped_gdf["id"]
         self._matrices[amenity_name] = grouped_ttm
-        self._amenities[amenity_name] = Amenity(amenity_name, grouped_gdf)
+        self._amenities[amenity_name] = Amenity(
+            amenity_name, grouped_gdf, add_name_to_id=False
+        )
 
 
-def merge_ttms(
+def _check_origin_equality(ttms_list: list[TravelTimeMatrices]):
+    """Raise error if origin H3 resolutions are different; warn if origin regions are
+    different. Returns the first `Origins` object."""
+
+    # check resolution is equal
+    h3_resolutions = {ttm.origins.h3_resolution for ttm in ttms_list}
+    if len(h3_resolutions) > 1:
+        raise ValueError(
+            "Todos los objetos `TimeTravelMatrices` deben tener la misma "
+            "resolución en su grilla de orígenes. Se tienen las siguientes "
+            f"resoluciones: {', '.join(h3_resolutions)}."
+        )
+
+    # warn if origins are not equal
+    sample_origins = ttms_list[0].origins
+    if not all(
+        ttm.origins.regions.equals(sample_origins.regions) for ttm in ttms_list
+    ):
+        warnings.warn(
+            "No todos los objetos `TimeTravelMatrices` fueron generados a "
+            "partir de los mismos orígenes; esto podría causar resultados "
+            "inesperados."
+        )
+
+    return sample_origins
+
+
+def merge_amenities(
     ttms: list[TravelTimeMatrices],
 ) -> TravelTimeMatrices:
     """
-    Une dos grupos de matrices de tiempos de viaje, calculadas sobre el mismo
-    conjunto de orígenes pero para distintas necesidades.
+    Une varios grupos de matrices de tiempos de viaje, calculadas sobre el
+    mismo conjunto de orígenes pero para distintas necesidades.
 
     Parameters
     ---
@@ -394,15 +423,9 @@ def merge_ttms(
     Nuevo objeto TravelTimeMatrices con todas las matrices.
     """
 
-    # check all origins are equal
-    origins = ttms[0].origins
-    if not all(ttm.origins == origins for ttm in ttms):
-        raise ValueError(
-            "Todos los objetos `TimeTravelMatrices` deben generarse a partir "
-            "del mismo objeto `Origins`."
-        )
+    origins = _check_origin_equality(ttms)
 
-    # combine matrices dicts
+    # combine matrices and amenities dicts
     matrices: dict[str, pd.DataFrame] = reduce(
         operator.ior, iter(ttm.matrices for ttm in ttms), {}
     )
@@ -411,3 +434,87 @@ def merge_ttms(
     )
 
     return TravelTimeMatrices(origins, amenities, matrices)
+
+
+def merge_populations(
+    segmented_ttms: dict[str, TravelTimeMatrices],
+) -> TravelTimeMatrices:
+    """
+    Une varios grupos de matrices de tiempos de viaje, calculadas sobre el
+    mismo conjunto de orígenes y el mismo conjunto de necesidades, pero con una
+    población distinta en cada celda de los orígenes (representando distintos
+    grupos poblacionales).
+
+    Parameters
+    ---
+    ttms : dict[str, TravelTimeMatrices]
+        Grupos de matrices de tiempos de viaje que se desean unir.
+        Deben tener el mismo conjunto de orígenes (solo diferenciándose en su
+        población), y el mismo conjunto de necesidades a cubrir. Los destinos
+        asociados a cada necesidad pueden ser distintos para distintos grupos
+        poblacionales (por ejemplo, adultos mayores que tienen acceso a
+        servicios de salud solo para ellos).
+
+        Cada objeto `TravelTimeMatrices` está asociado al nombre del grupo
+        poblacional al que corresponde; este nombre será agregado a la ID de
+        cada celda de origen del grupo (para diferenciarla de los demás
+        grupos).
+
+    Returns
+    ---
+    Nuevo objeto TravelTimeMatrices con todas las matrices.
+    """
+
+    ttms = list(segmented_ttms.values())
+
+    origins = _check_origin_equality(ttms)
+
+    # warn if amenities are not equal
+    amenity_names = ttms[0].amenities.keys()
+    if not all(ttm.amenities.keys() == amenity_names for ttm in ttms):
+        warnings.warn(
+            "No todos los objetos `TimeTravelMatrices` consideran las mismas "
+            "necesidades; esto podría causar resultados inesperados."
+        )
+        amenity_names = set.union(ttm.amenities.keys() for ttm in ttms)
+
+    # iterate over TravelTimeMatrices objects, combining:
+    # - origin grids (adding group prefix to each one)
+    # - TTMs (adding group prefix to each origin)
+    # - amenities (duplicates will be dropped later)
+    new_grids = []
+    new_ttms_matrices = {name: [] for name in amenity_names}
+    new_amenity_gdfs = {name: [] for name in amenity_names}
+    for prefix, ttm in segmented_ttms.items():
+        new_grid = origins.h3_grid.assign(id=f"{prefix}/" + origins.h3_grid.id)
+        new_grids.append(new_grid)
+        for name, matrix in ttm.matrices.items():
+            new_ttms_matrices[name].append(
+                matrix.assign(from_id=f"{prefix}/" + matrix.from_id)
+            )
+        for name, amenity in ttm.amenities.items():
+            new_amenity_gdfs[name].append(amenity.amenity_gdf)
+
+    # concatenate new origin grid (with all groups), new matrices for each
+    # amenity, and new amenities (in case different groups had different
+    # destinations within an amenity)
+    new_grid = gpd.GeoDataFrame(pd.concat(new_grids), crs=4326)
+    new_origins = Origins(origins.regions, origins.h3_resolution, new_grid)
+    new_ttms_matrices_concat = {
+        name: pd.concat(matrices)
+        for name, matrices in new_ttms_matrices.items()
+    }
+    new_amenities = [
+        Amenity(
+            name,
+            gpd.GeoDataFrame(
+                pd.concat(amenity_gdfs).drop_duplicates("id"), crs=4326
+            ),
+            add_name_to_id=False,
+        )
+        for name, amenity_gdfs in new_amenity_gdfs.items()
+    ]
+
+    return TravelTimeMatrices(
+        new_origins, new_amenities, new_ttms_matrices_concat
+    )

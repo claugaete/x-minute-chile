@@ -366,3 +366,40 @@ class AccessibilityRatings:
         return AccessibilityRatings(
             new_origins, self.amenities.values(), self.weights, new_gdf
         )
+
+    @staticmethod
+    def _split_gdf(gdf: gpd.GeoDataFrame) -> dict[str, gpd.GeoDataFrame]:
+        gdf = gdf.assign(group=gdf["id"].str[:-16], id=gdf["id"].str[-15:])
+        return {
+            group: group_gdf.drop(columns="group")
+            for group, group_gdf in gdf.groupby("group")
+        }
+
+    def split(self) -> dict[str, "AccessibilityRatings"]:
+        """
+        Separa orígenes según prefijo (grupo poblacional al que pertenece cada
+        celda).
+
+        Returns
+        ---
+        Un diccionario donde las llaves son los nombres de los grupos
+        poblacionales, y los valores son los objetos AccessibilityRatings
+        asociados a cada grupo.
+        """
+
+        split_grid = self._split_gdf(self.origins.h3_grid)
+        split_ratings = self._split_gdf(self.gdf.reset_index())
+
+        return {
+            group: AccessibilityRatings(
+                origins=Origins(
+                    self.origins.regions,
+                    self.origins.h3_resolution,
+                    split_grid[group],
+                ),
+                amenities=self.amenities.values(),
+                weights=self.weights,
+                gdf=split_ratings[group].set_index("id"),
+            )
+            for group in split_ratings.keys()
+        }

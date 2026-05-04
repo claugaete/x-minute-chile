@@ -37,6 +37,11 @@ class Amenity:
     bounds : BaseGeometry or None, default: None
         Si se especifica, se filtrará `amenity_gdf` para que solo contenga las
         filas que intersectan con el polígono dado.
+    add_name_to_id : bool, default: True
+        Si agregar el nombre de la necesidad al identificador de cada destino;
+        recomendado si se trabaja con múltiples necesidades, para evitar que
+        choquen dos destinos con el mismo identificador pero pertenecientes a
+        diferentes necesidades.
     """
 
     def __repr__(self):
@@ -47,6 +52,7 @@ class Amenity:
         name: str,
         amenity_gdf: gpd.GeoDataFrame,
         bounds: BaseGeometry | None = None,
+        add_name_to_id: bool = True,
     ):
 
         self._name = name
@@ -74,9 +80,10 @@ class Amenity:
 
         # add amenity name to each id (in case a destination from a different
         # amenity shares the same id)
-        self._amenity_gdf["id"] = (
-            self._name + "/" + self._amenity_gdf["id"].astype(str)
-        )
+        if add_name_to_id:
+            self._amenity_gdf["id"] = (
+                self._name + "/" + self._amenity_gdf["id"].astype(str)
+            )
 
         # make sure all geometries are point geometries
         if not (self._amenity_gdf.geom_type == "Point").all():
