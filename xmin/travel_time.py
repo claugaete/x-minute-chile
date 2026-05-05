@@ -467,7 +467,7 @@ def merge_populations(
 
     ttms = list(segmented_ttms.values())
 
-    origins = _check_origin_equality(ttms)
+    sample_origins = _check_origin_equality(ttms)
 
     # warn if amenities are not equal
     amenity_names = ttms[0].amenities.keys()
@@ -486,7 +486,9 @@ def merge_populations(
     new_ttms_matrices = {name: [] for name in amenity_names}
     new_amenity_gdfs = {name: [] for name in amenity_names}
     for prefix, ttm in segmented_ttms.items():
-        new_grid = origins.h3_grid.assign(id=f"{prefix}/" + origins.h3_grid.id)
+        new_grid = ttm.origins.h3_grid.assign(
+            id=f"{prefix}/" + ttm.origins.h3_grid["id"]
+        )
         new_grids.append(new_grid)
         for name, matrix in ttm.matrices.items():
             new_ttms_matrices[name].append(
@@ -499,7 +501,9 @@ def merge_populations(
     # amenity, and new amenities (in case different groups had different
     # destinations within an amenity)
     new_grid = gpd.GeoDataFrame(pd.concat(new_grids), crs=4326)
-    new_origins = Origins(origins.regions, origins.h3_resolution, new_grid)
+    new_origins = Origins(
+        sample_origins.regions, sample_origins.h3_resolution, new_grid
+    )
     new_ttms_matrices_concat = {
         name: pd.concat(matrices)
         for name, matrices in new_ttms_matrices.items()
