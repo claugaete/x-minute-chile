@@ -433,7 +433,7 @@ def merge_amenities(
         operator.ior, iter(ttm.amenities for ttm in ttms), {}
     )
 
-    return TravelTimeMatrices(origins, amenities, matrices)
+    return TravelTimeMatrices(origins, amenities.values(), matrices)
 
 
 def merge_populations(
