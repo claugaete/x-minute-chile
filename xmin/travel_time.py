@@ -377,8 +377,8 @@ class TravelTimeMatrices:
 
 
 def _check_origin_equality(ttms_list: list[TravelTimeMatrices]):
-    """Raise error if origin H3 resolutions are different; warn if origin regions are
-    different. Returns the first `Origins` object."""
+    """Raise error if origin H3 resolutions are different; warn if origin
+    regions are different. Returns the first `Origins` object."""
 
     # check resolution is equal
     h3_resolutions = {ttm.origins.h3_resolution for ttm in ttms_list}
