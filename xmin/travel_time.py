@@ -339,7 +339,7 @@ class TravelTimeMatrices:
         amenity = self._amenities[amenity_name]
 
         assigned_ttm = self.matrices[amenity_name].merge(
-            amenity[["id", group_col]],
+            amenity.amenity_gdf[["id", group_col]],
             left_on="to_id",
             right_on="id",
         )
@@ -372,7 +372,7 @@ class TravelTimeMatrices:
         grouped_gdf["name"] = grouped_gdf["id"]
         self._matrices[amenity_name] = grouped_ttm
         self._amenities[amenity_name] = Amenity(
-            amenity_name, grouped_gdf, add_name_to_id=False
+            amenity_name, grouped_gdf
         )
 
 
