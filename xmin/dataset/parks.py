@@ -1,11 +1,26 @@
 import geopandas as gpd
 import pandas as pd
-from shapely import MultiPoint, MultiPolygon, Point, Polygon
+from shapely import MultiLineString, MultiPoint, MultiPolygon, Point, Polygon
 from shapely.geometry.base import BaseGeometry
+from shapely.ops import unary_union
 from tqdm.auto import tqdm
 
 from ..config import config
 from ..geometry import convert_polygon_to_representative_points
+
+
+def _collection_to_lines(geom: BaseGeometry):
+    """Convierte todas las geometrías a líneas."""
+    if geom.geom_type in ("Point", "MultiPoint"):
+        return MultiLineString()
+    if geom.geom_type in ("LineString", "MultiLineString", "LinearRing"):
+        return geom
+    if geom.geom_type in ("Polygon", "MultiPolygon"):
+        return geom.boundary
+    if geom.geom_type == "GeometryCollection":
+        parts = [_collection_to_lines(g) for g in geom.geoms]
+        return unary_union(parts)
+    return geom
 
 
 def clean_parks(
@@ -25,7 +40,7 @@ def clean_parks(
     `pedestrian_network`, y solamente agregando puntos intermedios si
     `is_fenced_column` es falso para el polígono en cuestión, o si no hay
     intersección entre el polígono y `pedestrian_network`.
-    
+
     El peso asignado a cada punto es la razón entre el área del polígono que
     representa, y la cantidad de puntos que representan a ese polígono. Es
     decir, si a partir de un polígono de área 5000 se obtuvieron 10 puntos,
@@ -61,18 +76,16 @@ def clean_parks(
             if index_column is None
             else parks_gdf[index_column]
         ),
-        area=lambda gdf: gdf.area
+        area=lambda gdf: gdf.area,
     )
 
     pedestrian_network = pedestrian_network.to_crs(config.projected_crs)
 
     # some ways in the network are polygons, they need to be converted into
     # lines
-    polygons = pedestrian_network.geom_type.isin(["Polygon", "MultiPolygon"])
-    # convert polygons to their boundary (returns LinearRing / MultiLineString)
-    pedestrian_network.loc[polygons, "geometry"] = pedestrian_network.loc[
-        polygons, "geometry"
-    ].boundary
+    pedestrian_network.geometry = pedestrian_network.geometry.apply(
+        _collection_to_lines
+    )
     pedestrian_network_union = pedestrian_network.union_all()
 
     results = []
@@ -91,7 +104,7 @@ def clean_parks(
             )
 
         for geom in geoms.geoms:
-            
+
             # generate entry points
             inter = geom.exterior.intersection(pedestrian_network_union)
             if inter.is_empty:
@@ -104,11 +117,11 @@ def clean_parks(
                 raise RuntimeError(
                     f"Intersección con geometría de tipo {inter.geom_type}"
                 )
-                
+
             # only add intermediate points if the park is not fenced, or if
             # there are no entry points
             add_extra_points = not (row[is_fenced_column] and entry_points)
-            
+
             # get all representative points and add to results
             representative_points = convert_polygon_to_representative_points(
                 polygon=geom,

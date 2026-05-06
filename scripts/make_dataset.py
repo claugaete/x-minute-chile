@@ -613,8 +613,13 @@ class MakeEducacion(MakeDataset):
 class MakeAreasVerdes(MakeDataset):
     """
     Descarga y limpia datos de áreas verdes urbanas (plazas y parques), según
-    la cartografía de Indicadores de Calidad de Plazas y Parques Urbanos, del
+    dos fuentes:
+    
+    - Indicadores de Calidad de Plazas y Parques Urbanos, del
     Instituto Nacional de Estadísticas (2019): https://arcg.is/1LTLCf
+    - Catástro de Áreas Verdes, del Instituto Nacional de Estadísticas (2024):
+    https://www.ine.gob.cl/herramientas/portal-de-mapas/geodatos-abiertos
+    (Cartografía > Dinámica territorial > Catastros de áreas verdes)
 
     La limpieza involucra convertir los polígonos que representan a las
     distintas plazas y parques en puntos. Si `n` puntos pertenecen a la misma
@@ -636,22 +641,34 @@ class MakeAreasVerdes(MakeDataset):
 
     name = "areas-verdes"
     rar_path = RAW_DATA_PATH / "amenities" / "verdes" / "verdes.rar"
+    zip_path = RAW_DATA_PATH / "amenities" / "verdes" / "verdes_2024.zip"
 
     def __init__(self, min_dist: float = 200):
         super().__init__()
         self.min_dist = min_dist
 
     def download(self):
+        # official download is currently down
         download_file(
-            "https://geoarchivos.ine.cl/Files/Calidad_PlPq/SHP.rar",
-            self.rar_path,
+            "https://drive.usercontent.google.com/"
+            "download?id=1PGrWLaMjxBwrwC4nUvZoPDS6_KMAfEpZ",
+            self.rar_path
+        )
+        download_file(
+            "https://www.ine.gob.cl/docs/default-source/geodatos-abiertos/"
+            "cartografia/din%C3%A1mica-territorial/"
+            "catastros-de-%C3%A1reas-verdes/"
+            "gdb-catastro-%C3%A1reas-verdes-2024.zip?sfvrsn=8d2c24fa_3",
+            self.zip_path,
         )
 
     def clean(self):
-        print("Extrayendo RAR...")
+        print("Extrayendo archivos...")
         inter_dir = INTERIM_DATA_PATH / "amenities" / "verdes"
         unrar(self.rar_path, inter_dir)
+        unzip(self.zip_path, inter_dir)
 
+        # create geodataframes for both datasets
         print("Leyendo GeoDataFrames...")
         verdes_g1g2 = gpd.read_file(
             inter_dir / "CALIDAD_pzpq_2019_G1G2.shp"
@@ -675,10 +692,24 @@ class MakeAreasVerdes(MakeDataset):
             + verdes_gdf["COMUNA"]
         )
 
+        verdes_2024 = gpd.read_file(
+            inter_dir / "Publicacion_Catastro_Actualizacion2024.gdb"
+        ).to_crs(4326)
+        verdes_2024["fenced"] = False
+        verdes_2024["name"] = (
+            verdes_2024["TIPO_EP"]
+            + " "
+            + verdes_2024["NOMBRE_EP"].fillna(
+                verdes_2024.index.to_series().astype(str)
+            )
+            + " "
+            + verdes_2024["COMUNA"]
+        )
+
         # use quackosm to extract roads intersecting parks
         print("Obteniendo rutas al interior de áreas verdes...")
         chile_pbf_path = RAW_DATA_PATH / "osm" / "Chile.osm.pbf"
-        verdes_union = verdes_gdf.union_all()
+        verdes_union = pd.concat([verdes_gdf, verdes_2024]).union_all()
         roads_gdf = qosm.convert_pbf_to_geodataframe(
             pbf_path=chile_pbf_path,
             tags_filter={
@@ -708,12 +739,28 @@ class MakeAreasVerdes(MakeDataset):
         )
         points_gdf = points_gdf.assign(id=points_gdf.index)
 
+        print("Asignando puntos representativos a áreas verdes (2024)...")
+        points_2024 = clean_parks(
+            verdes_2024,
+            roads_gdf,
+            is_fenced_column="fenced",
+            index_column="name",
+            min_dist=self.min_dist,
+        )
+        points_2024 = points_2024.assign(id=points_2024.index)
+
         # split parks and plazas, and save
         print("Creando archivo GeoPackage...")
         gpkg_path = PROCESSED_DATA_PATH / "amenities" / "areas_verdes.gpkg"
         makedir(gpkg_path, is_file=True, remove_if_exists=True)
         points_gdf.to_file(gpkg_path, layer="puntos", driver="GPKG")
-        verdes_gdf.to_file(gpkg_path, layer="poligonos", driver="GPKG")
+        verdes_gdf.assign(id=verdes_gdf.index).to_file(
+            gpkg_path, layer="poligonos", driver="GPKG"
+        )
+        points_2024.to_file(gpkg_path, layer="puntos_2024", driver="GPKG")
+        verdes_2024.assign(id=verdes_2024.index).to_file(
+            gpkg_path, layer="poligonos_2024", driver="GPKG"
+        )
 
 
 class MakeFeriasLibres(MakeDataset):
