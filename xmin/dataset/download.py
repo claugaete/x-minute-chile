@@ -54,6 +54,11 @@ def download_file(
     makedir(Path(download_path), is_file=True)
 
     response = requests.get(url, stream=True)
+    try:
+        response.raise_for_status()
+    except requests.exceptions.HTTPError as e:
+        print(f"Error descargando {url}: " + str(e))
+        return
     file_size = response.headers.get("Content-Length")
     last_modified = response.headers.get("Last-Modified")
     desc = f"Descargando {Path(download_path).name}, últ. mod.: " + (
