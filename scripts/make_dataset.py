@@ -754,7 +754,7 @@ class MakeAreasVerdes(MakeDataset):
         gpkg_path = PROCESSED_DATA_PATH / "amenities" / "areas_verdes.gpkg"
         makedir(gpkg_path, is_file=True, remove_if_exists=True)
         points_gdf.to_file(gpkg_path, layer="puntos", driver="GPKG")
-        verdes_gdf.assign(id=verdes_gdf.index).to_file(
+        verdes_gdf.rename({"TARGET_FID": "id"}).to_file(
             gpkg_path, layer="poligonos", driver="GPKG"
         )
         points_2024.to_file(gpkg_path, layer="puntos_2024", driver="GPKG")
