@@ -2,6 +2,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 import warnings
 
+import contextily as cx
 from esda.moran import Moran_Local
 import folium
 from folium.folium import Map
@@ -126,8 +127,13 @@ class OverlayConfig:
     ---
     show_borders : bool, default: True
         Si se mostrarán las fronteras de las regiones del análisis.
+    show_basemap : bool, default: False
+        Si se mostrará un mapa base para contextualizar la región del análisis.
+        Solo se considerará este parámetro si la visualización no es
+        interactiva (las visualizaciones interactivas vienen con un mapa base
+        propio).
     show_scalebar : bool, default: False
-        Si se mostrará una escala gráfica que muestre las distancias en el
+        Si se mostrará una escala gráfica que presente distancias en el
         contexto de la visualización. Solo se considerará este parámetro si la
         visualización no es interactiva (las visualizaciones interactivas
         vienen con una escala gráfica propia).
@@ -140,6 +146,14 @@ class OverlayConfig:
     borders_kwds : dict, default: {}
         Diccionario de argumentos que serán pasados al momento de graficar las
         fronteras.
+    basemap_kwds : dict, default: {}
+        Diccionario de argumentos que serán pasados al momento de graficar la
+        escala gráfica, con la función `add_basemap` de `contextily`. Si se
+        recibe un parámetro `crs`, este será aplicado a todos los elementos de
+        la visualización (incluyendo la escala gráfica si se tiene una, lo cual
+        podría causar warnings si el CRS no está proyectado). Solo se
+        considerará este parámetro si la visualización no es interactiva (las
+        visualizaciones interactivas vienen con una escala gráfica propia).
     scalebar_kwds : dict, default: {}
         Diccionario de argumentos que serán pasados al momento de graficar la
         escala gráfica, con la función `scale_bar` de `matplotlib-map-utils`.
@@ -163,10 +177,12 @@ class OverlayConfig:
     """
 
     show_borders: bool = True
+    show_basemap: bool = False
     show_scalebar: bool = False
     show_amenities: bool | list[Amenity | str] = False
     show_roads: bool = False
     borders_kwds: dict = field(default_factory=dict)
+    basemap_kwds: dict = field(default_factory=dict)
     scalebar_kwds: dict = field(default_factory=dict)
     amenities_kwds: dict = field(default_factory=dict)
     roads_kwds: dict = field(default_factory=dict)
@@ -340,9 +356,18 @@ class AccessibilityVisualizer:
             return m
         else:
 
+            # project to CRS if basemap has it
+            if "crs" in overlay_cfg.basemap_kwds:
+                crs = overlay_cfg.basemap_kwds["crs"]
+                gdf_to_plot = gdf_to_plot.to_crs(crs)
+                regions_to_plot = regions_to_plot.to_crs(crs)
+                if overlay_cfg.show_amenities:
+                    amenities_to_plot = amenities_to_plot.to_crs(crs)
+                if overlay_cfg.show_roads:
+                    roads_gdf = roads_gdf.to_crs(config.projected_crs)
             # for the scalebar to show correct distances, we need to project
             # the plots
-            if overlay_cfg.show_scalebar:
+            elif overlay_cfg.show_scalebar:
                 gdf_to_plot = gdf_to_plot.to_crs(config.projected_crs)
                 regions_to_plot = regions_to_plot.to_crs(config.projected_crs)
                 if overlay_cfg.show_amenities:
@@ -354,13 +379,17 @@ class AccessibilityVisualizer:
 
             default_plot_kwds = {
                 "alpha": (
-                    config.alpha_when_roads_shown
-                    if overlay_cfg.show_roads
+                    config.alpha_when_background
+                    if (overlay_cfg.show_roads or overlay_cfg.show_basemap)
                     else 1
                 ),
             }
 
             default_borders_kwds = {"edgecolor": "black", "facecolor": "none"}
+            default_basemap_kwds = {
+                "crs": gdf_to_plot.crs,
+                "source": cx.providers.CartoDB.Voyager,
+            }
             default_scalebar_bar_kwds = {
                 "projection": gdf_to_plot.crs,
                 "unit": "km",
@@ -372,7 +401,7 @@ class AccessibilityVisualizer:
             }
             default_roads_kwds = default_borders_kwds | {
                 "linewidth": 0.5,
-                "zorder": -1,
+                "zorder": 0.5,
             }
             default_amenities_kwds = {
                 "markersize": 2,
@@ -383,6 +412,10 @@ class AccessibilityVisualizer:
             if overlay_cfg.show_borders:
                 regions_to_plot.plot(
                     ax=ax, **(default_borders_kwds | overlay_cfg.borders_kwds)
+                )
+            if overlay_cfg.show_basemap:
+                cx.add_basemap(
+                    ax=ax, **(default_basemap_kwds | overlay_cfg.basemap_kwds)
                 )
             if overlay_cfg.show_scalebar:
                 scale_bar(
