@@ -614,7 +614,7 @@ class MakeAreasVerdes(MakeDataset):
     """
     Descarga y limpia datos de áreas verdes urbanas (plazas y parques), según
     dos fuentes:
-    
+
     - Indicadores de Calidad de Plazas y Parques Urbanos, del
     Instituto Nacional de Estadísticas (2019): https://arcg.is/1LTLCf
     - Catástro de Áreas Verdes, del Instituto Nacional de Estadísticas (2024):
@@ -652,7 +652,7 @@ class MakeAreasVerdes(MakeDataset):
         download_file(
             "https://drive.usercontent.google.com/"
             "download?id=1PGrWLaMjxBwrwC4nUvZoPDS6_KMAfEpZ",
-            self.rar_path
+            self.rar_path,
         )
         download_file(
             "https://www.ine.gob.cl/docs/default-source/geodatos-abiertos/"
@@ -706,27 +706,33 @@ class MakeAreasVerdes(MakeDataset):
             + verdes_2024["COMUNA"]
         )
 
-        # use quackosm to extract roads intersecting parks
+        # use quackosm to extract pedestrian roads intersecting parks
         print("Obteniendo rutas al interior de áreas verdes...")
         chile_pbf_path = RAW_DATA_PATH / "osm" / "Chile.osm.pbf"
         verdes_union = pd.concat([verdes_gdf, verdes_2024]).union_all()
         roads_gdf = qosm.convert_pbf_to_geodataframe(
             pbf_path=chile_pbf_path,
-            tags_filter={
-                "highway": [
-                    "footway",
-                    "path",
-                    "pedestrian",
-                    "steps",
-                    "living_street",
-                    "residential",
-                    "service",
-                ]
-            },
+            tags_filter={"highway": True},
             working_directory=INTERIM_DATA_PATH / "quackosm",
             geometry_filter=verdes_union,
-            keep_all_tags=False,
         )
+        roads_gdf = roads_gdf[
+            ~(
+                roads_gdf["highway"].isin(
+                    [
+                        "cycleway",
+                        "motor",
+                        "proposed",
+                        "construction",
+                        "abandoned",
+                        "platform",
+                        "raceway",
+                        "motorway",
+                        "motorway_link",
+                    ]
+                )
+            )
+        ]
 
         # assign representative points
         print("Asignando puntos representativos a áreas verdes...")
