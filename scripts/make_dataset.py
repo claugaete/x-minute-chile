@@ -648,10 +648,8 @@ class MakeAreasVerdes(MakeDataset):
         self.min_dist = min_dist
 
     def download(self):
-        # official download is currently down
         download_file(
-            "https://drive.usercontent.google.com/"
-            "download?id=1PGrWLaMjxBwrwC4nUvZoPDS6_KMAfEpZ",
+            "https://geoarchivos.ine.cl/Files/Calidad_PlPq/SHP.rar",
             self.rar_path,
         )
         download_file(
