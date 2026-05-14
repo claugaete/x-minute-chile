@@ -522,9 +522,7 @@ class MakeEducacion(MakeDataset):
         }
 
         for column, value_dict in value_dicts.items():
-            print(df[column].astype(str))
             df[column] = df[column].astype(str).map(value_dict)
-            print(df[column])
 
         return gpd.GeoDataFrame(
             df,
@@ -576,13 +574,13 @@ class MakeEducacion(MakeDataset):
 
         # asignamos cluster a cada edificio en el gdf
         label_series = pd.Series(all_labels, index=all_indices)
-        gdf["_cluster"] = (
+        gdf["cluster"] = (
             gdf["COD_INST"].astype(str) + "__" + label_series.astype(str)
         )
-        cluster_sizes = gdf["_cluster"].map(gdf["_cluster"].value_counts())
+        cluster_sizes = gdf["cluster"].map(gdf["cluster"].value_counts())
         gdf["weight"] = 1 / cluster_sizes
 
-        return gdf.drop(columns="_cluster")
+        return gdf
 
     def download(self):
         download_file(
