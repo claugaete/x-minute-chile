@@ -384,7 +384,7 @@ def _check_origin_equality(ttms_list: list[TravelTimeMatrices]):
     h3_resolutions = {ttm.origins.h3_resolution for ttm in ttms_list}
     if len(h3_resolutions) > 1:
         raise ValueError(
-            "Todos los objetos `TimeTravelMatrices` deben tener la misma "
+            "Todos los objetos `TravelTimeMatrices` deben tener la misma "
             "resolución en su grilla de orígenes. Se tienen las siguientes "
             f"resoluciones: {', '.join(h3_resolutions)}."
         )
@@ -395,7 +395,7 @@ def _check_origin_equality(ttms_list: list[TravelTimeMatrices]):
         ttm.origins.regions.equals(sample_origins.regions) for ttm in ttms_list
     ):
         warnings.warn(
-            "No todos los objetos `TimeTravelMatrices` fueron generados a "
+            "No todos los objetos `TravelTimeMatrices` fueron generados a "
             "partir de los mismos orígenes; esto podría causar resultados "
             "inesperados."
         )
@@ -473,7 +473,7 @@ def merge_populations(
     amenity_names = ttms[0].amenities.keys()
     if not all(ttm.amenities.keys() == amenity_names for ttm in ttms):
         warnings.warn(
-            "No todos los objetos `TimeTravelMatrices` consideran las mismas "
+            "No todos los objetos `TravelTimeMatrices` consideran las mismas "
             "necesidades; esto podría causar resultados inesperados."
         )
         amenity_names = set.union(ttm.amenities.keys() for ttm in ttms)
