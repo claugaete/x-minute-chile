@@ -91,9 +91,9 @@ def _clean_ide_dataset_numbers(
 
 class MakeDataset(ABC):
     """
-    Interfaz para clases que tienen dos funcionalidades: - Descargar archivos y
-    guardarlos en `data/raw`. - Limpiar los archivos descargados y guardarlos
-    en `data/processed`.
+    Interfaz para clases que tienen dos funcionalidades:
+    - Descargar archivos y guardarlos en `data/raw`.
+    - Limpiar los archivos descargados y guardarlos en `data/processed`.
 
     Se debe definir el atributo `name` con el nombre que se desea utilizar para
     el dataset en el script principal (que permite seleccionar el dataset a
