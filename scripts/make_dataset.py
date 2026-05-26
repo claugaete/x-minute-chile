@@ -1,25 +1,34 @@
 # script para descargar datos de Chile (actualizados)
 from abc import ABC, abstractmethod
 import argparse
+import asyncio
+import inspect
 import json
+import os
 from pathlib import Path
 import re
 import subprocess
 import zipfile
 
 from bs4 import BeautifulSoup
+from dotenv import load_dotenv
 import geopandas as gpd
+import nominatim_api as napi
 import numpy as np
 import pandas as pd
 import quackosm as qosm
 import requests
 from sklearn.cluster import DBSCAN
+from tqdm.asyncio import tqdm as tqdm_async
 from tqdm.auto import tqdm
 
 from xmin.config import config
 from xmin.dataset.download import download_file, makedir
 from xmin.dataset.gtfs import clean_gtfs_basic, clean_gtfs_frequencies
 from xmin.dataset.parks import clean_parks
+
+load_dotenv()
+NOMINATIM_PATH = os.getenv("NOMINATIM_PATH")
 
 DATA_PATH = Path(__file__).parent.resolve() / ".." / "data"
 RAW_DATA_PATH = DATA_PATH / "raw"
@@ -118,10 +127,22 @@ class MakeDataset(ABC):
         en `self.processed_path`."""
         pass
 
-    def download_and_clean(self):
+    async def run_download(self):
+        """Ejecuta la descarga, realizando await si es asíncrono."""
+        download = self.download()
+        if inspect.isawaitable(download):
+            await download
+
+    async def run_clean(self):
+        """Ejecuta la limpieza, realizando await si es asíncrona."""
+        clean = self.clean()
+        if inspect.isawaitable(clean):
+            await clean
+
+    async def run_download_and_clean(self):
         """Ejecuta `download` seguido de `clean`."""
-        self.download()
-        self.clean()
+        await self.run_download()
+        await self.run_clean()
 
 
 class MakeOsm(MakeDataset):
@@ -803,8 +824,168 @@ class MakeFeriasLibres(MakeDataset):
         ferias_gdf.to_file(gpkg_path, layer="ferias", driver="GPKG")
 
 
-if __name__ == "__main__":
+class MakeTrabajos(MakeDataset):
+    """
+    Obtiene direcciones de empleos formales (del SII) y realiza geocoding para
+    convertirlas de texto a coordenadas, asignando el número de empleados a
+    cada sucursal (se distribuyen los empleados de la empresa de manera
+    uniforme entre las distintas sucursales).
 
+    El geocoding requiere una base de datos local de Nominatim, que permita
+    realizar geocoding para todo Chile. Instrucciones sobre cómo instalar
+    Nominatim e importar datos desde un archivo PBF se encuentran en
+    https://nominatim.org/release-docs/latest/admin/Installation/ y
+    https://nominatim.org/release-docs/latest/admin/Import/.
+    """
+
+    name = "trabajos"
+    clean_async = True
+    zip_empresas = RAW_DATA_PATH / "trabajos" / "empresas.zip"
+    zip_direcciones = RAW_DATA_PATH / "trabajos" / "direcciones.zip"
+
+    def download(self):
+        download_file(
+            "https://www.sii.cl/estadisticas/nominas/"
+            "PUB_EMPRESAS_PJ_2020_A_2024.zip",
+            self.zip_empresas,
+        )
+        download_file(
+            "https://www.sii.cl/estadisticas/nominas/PUB_NOM_DIRECCIONES.zip",
+            self.zip_direcciones,
+        )
+
+    @staticmethod
+    async def geocode_addresses(
+        df: pd.DataFrame,
+        street_col: str,
+        number_col: str,
+        city_col: str,
+        max_concurrent: int = 10,
+    ) -> gpd.GeoDataFrame:
+        """
+        Realiza geocoding para una serie de direcciones, retornando un
+        GeoDataFrame con las coordenadas asociadas a cada dirección.
+
+        Parameters
+        ---
+        df : DataFrame
+            DataFrame con las direcciones para las cuales realizar geocoding.
+        street_col : str
+            Columna de `df` en la cual se encuentra el nombre de la calle de
+            cada dirección.
+        number_col : str
+            Columna de `df` en la cual se encuentra el número de cada
+            dirección.
+        city_col : str
+            Columna de `df` en la cual se encuentra la ciudad de cada
+            dirección.
+        max_concurrent : int, default: 10
+            Número máximo de queries paralelas a la base de datos de Nominatim.
+
+        Returns
+        ---
+        GeoDataFrame con las mismas columnas de `df`, más `longitude`
+        (coordenadas de longitud), `latitude` (coordenadas de latitud) y
+        `geometry` (el punto asociado a la dirección; vacío si no se
+        encontraron coordenadas para la dirección entregada).
+        """
+
+        df = df.copy()
+
+        semaphore = asyncio.Semaphore(max_concurrent)
+        async with napi.NominatimAPIAsync(NOMINATIM_PATH) as api:
+
+            async def search(address, number, city):
+                async with semaphore:
+                    results = await api.search_address(
+                        street=f"{address} {number}", city=city
+                    )
+                    if not results:
+                        return (np.nan, np.nan)
+                    return (results[0].centroid.x, results[0].centroid.y)
+
+            tasks = [
+                search(row[street_col], row[number_col], row[city_col])
+                for _, row in df.iterrows()
+            ]
+            results = await tqdm_async.gather(*tasks, total=len(df))
+
+        df[["longitude", "latitude"]] = results
+
+        return gpd.GeoDataFrame(
+            df,
+            geometry=gpd.points_from_xy(df["longitude"], df["latitude"]),
+            crs=4326,
+        )
+
+    async def clean(self):
+        interim_path = INTERIM_DATA_PATH / "trabajos"
+        print("Extrayendo ZIPs...")
+        unzip(self.zip_empresas, interim_path)
+        unzip(self.zip_direcciones, interim_path)
+
+        print("Construyendo lista de direcciones...")
+
+        # load dataframes
+        empresas = pd.read_csv(
+            interim_path / "PUB_EMPRESAS_PJ_2024.txt", sep="\t"
+        )
+        empresas = empresas[
+            empresas["Fecha término de giro"].isna()
+            & empresas["Número de trabajadores dependie"]
+            > 0
+        ]
+
+        domicilios = pd.read_csv(
+            interim_path / "PUB_NOM_DOMICILIO.txt", sep="\t"
+        )
+        sucursales = pd.read_csv(
+            interim_path / "PUB_NOM_SUCURSAL.txt", sep="\t"
+        )
+        direcciones = pd.concat([domicilios, sucursales])
+
+        # filter only addresses with workers
+        direcciones = direcciones[direcciones["VIGENCIA"] == "S"].drop(
+            columns="VIGENCIA"
+        )
+        direcciones = (
+            direcciones.merge(
+                empresas[
+                    ["RUT", "Razón social", "Número de trabajadores dependie"]
+                ],
+                on="RUT",
+                how="inner",
+            ).rename(
+                columns={
+                    "Razón social": "name",
+                    "Número de trabajadores dependie": "trabajadores_empresa",
+                }
+            )
+        ).reset_index(drop=True)
+
+        print("Obteniendo coordenadas...")
+        gdf = await self.geocode_addresses(
+            direcciones,
+            street_col="CALLE",
+            number_col="NUMERO",
+            city_col="COMUNA",
+        )
+
+        # assign weights  (weight = number of workers in the company divided by
+        # number of addresses associated with the company)
+        gdf["direcciones_validas"] = gdf["RUT"].map(gdf["RUT"].value_counts())
+        gdf["weight"] = (
+            gdf["trabajadores_empresa"] / gdf["direcciones_validas"]
+        )
+        gdf = gdf.reset_index().rename(columns={"index": "id"})
+
+        print("Creando archivo GeoPackage...")
+        gpkg_path = PROCESSED_DATA_PATH / "trabajos" / "trabajos.gpkg"
+        makedir(gpkg_path, is_file=True, remove_if_exists=True)
+        gdf.to_file(gpkg_path)
+
+
+if __name__ == "__main__":
     make_osm = MakeOsm()
     make_censo = MakeCenso()
     make_gtfs_santiago = MakeGtfsSantiago()
@@ -814,6 +995,7 @@ if __name__ == "__main__":
     make_educacion = MakeEducacion()
     make_areas_verdes = MakeAreasVerdes()
     make_ferias_libres = MakeFeriasLibres()
+    make_trabajos = MakeTrabajos()
 
     all_datasets: list[MakeDataset] = [
         make_osm,
@@ -837,11 +1019,12 @@ if __name__ == "__main__":
 
     options = "\n".join(
         [
-            "- all: todos los datasets",
+            "- all: todos los datasets (excepto trabajos)",
             "- update: todos los datasets que reciben actualizaciones "
             "frecuentes",
         ]
         + [f"- {dataset.name}" for dataset in all_datasets]
+        + ["trabajos (requiere base de datos local de Nominatim)"]
     )
 
     parser = argparse.ArgumentParser(
@@ -870,6 +1053,8 @@ if __name__ == "__main__":
         datasets_to_process = all_datasets
     elif args.dataset == "update":
         datasets_to_process = updated_datasets
+    elif args.dataset == "trabajos":
+        datasets_to_process = [make_trabajos]
     else:
         datasets_to_process = [
             dataset for dataset in all_datasets if dataset.name == args.dataset
@@ -883,8 +1068,8 @@ if __name__ == "__main__":
     for dataset in datasets_to_process:
         print(f"\n--- {dataset.name.upper()} ---")
         if not args.download and not args.clean:
-            dataset.download_and_clean()
+            asyncio.run(dataset.run_download_and_clean())
         if args.download:
-            dataset.download()
+            asyncio.run(dataset.run_download())
         if args.clean:
-            dataset.clean()
+            asyncio.run(dataset.run_clean())
