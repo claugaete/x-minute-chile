@@ -30,7 +30,8 @@ from xmin.dataset.parks import clean_parks
 load_dotenv()
 NOMINATIM_PATH = os.getenv("NOMINATIM_PATH")
 
-DATA_PATH = Path(__file__).parent.resolve() / ".." / "data"
+DIR_PATH = Path(__file__).parent.resolve()
+DATA_PATH = DIR_PATH / ".." / "data"
 RAW_DATA_PATH = DATA_PATH / "raw"
 INTERIM_DATA_PATH = DATA_PATH / "interim"
 PROCESSED_DATA_PATH = DATA_PATH / "processed"
@@ -839,7 +840,6 @@ class MakeTrabajos(MakeDataset):
     """
 
     name = "trabajos"
-    clean_async = True
     zip_empresas = RAW_DATA_PATH / "trabajos" / "empresas.zip"
     zip_direcciones = RAW_DATA_PATH / "trabajos" / "direcciones.zip"
 
@@ -855,7 +855,82 @@ class MakeTrabajos(MakeDataset):
         )
 
     @staticmethod
+    def match_commune(result: napi.SearchResult, commune: str):
+        """Revisa si la comuna del resultado obtenido es igual a la comuna
+        buscada. Se asume que la comuna está en mayúsculas."""
+        address_row = next(
+            (row for row in result.address_rows if row.admin_level == 8), None
+        )
+        if address_row is None:
+            return False
+        else:
+            return any(
+                commune == name.upper() for name in address_row.names.values()
+            )
+
+    async def search(
+        self,
+        street: str,
+        number: str | float,
+        city: str,
+        api: napi.NominatimAPIAsync,
+        semaphore: asyncio.Semaphore,
+        attempt: int = 1,
+    ):
+        """Realiza geocoding para una dirección, dada la calle, el número y la
+        comuna. `attempt` guarda la cantidad de intentos que se han realizado
+        para la dirección."""
+
+        # if query is malformed, take the first number as the street
+        # number, everything before it as the street name, and ignore
+        # everything after it
+        if pd.isna(number):
+            match = re.search(r"^(.*?)\s*(\d+)", street)
+            if match:
+                street = match.group(1).strip()
+                number = match.group(2)
+
+        async with semaphore:
+            # get results
+            results = await api.search_address(
+                street=f"{number} {street}",
+                city=city,
+                format="geojson",
+                address_details=True,
+            )
+
+        # get first result whose commune matches with the city; if none
+        # match, return None
+        selected_result = next(
+            (result for result in results if self.match_commune(result, city)),
+            None,
+        )
+
+        # if no result was selected and the street name is more than
+        # one word long, try again but only with the last word of the
+        # street name; if not, return empty point
+        if selected_result is None:
+            street_split = street.split()
+            if len(street_split) > 1:
+                return await self.search(
+                    street_split[-1],
+                    number,
+                    city,
+                    api,
+                    semaphore,
+                    attempt=attempt + 1,
+                )
+            else:
+                return (np.nan, np.nan, attempt)
+
+        return (
+            selected_result.centroid.x,
+            selected_result.centroid.y,
+            attempt,
+        )
+
     async def geocode_addresses(
+        self,
         df: pd.DataFrame,
         street_col: str,
         number_col: str,
@@ -894,23 +969,19 @@ class MakeTrabajos(MakeDataset):
 
         semaphore = asyncio.Semaphore(max_concurrent)
         async with napi.NominatimAPIAsync(NOMINATIM_PATH) as api:
-
-            async def search(address, number, city):
-                async with semaphore:
-                    results = await api.search_address(
-                        street=f"{address} {number}", city=city
-                    )
-                    if not results:
-                        return (np.nan, np.nan)
-                    return (results[0].centroid.x, results[0].centroid.y)
-
             tasks = [
-                search(row[street_col], row[number_col], row[city_col])
+                self.search(
+                    row[street_col],
+                    row[number_col],
+                    row[city_col],
+                    api,
+                    semaphore,
+                )
                 for _, row in df.iterrows()
             ]
             results = await tqdm_async.gather(*tasks, total=len(df))
 
-        df[["longitude", "latitude"]] = results
+        df[["longitude", "latitude", "attempts"]] = results
 
         return gpd.GeoDataFrame(
             df,
@@ -944,9 +1015,16 @@ class MakeTrabajos(MakeDataset):
         )
         direcciones = pd.concat([domicilios, sucursales])
 
+        with open(DIR_PATH / "comunas_sii_translation.json", "r") as file:
+            comunas_sii_translation = json.load(file)
+
         # filter only addresses with workers
-        direcciones = direcciones[direcciones["VIGENCIA"] == "S"].drop(
-            columns="VIGENCIA"
+        direcciones = direcciones[
+            (direcciones["VIGENCIA"] == "S")
+            & (direcciones["COMUNA"] != "Sin Comuna")
+        ].drop(columns="VIGENCIA")
+        direcciones["COMUNA"] = direcciones["COMUNA"].map(
+            comunas_sii_translation
         )
         direcciones = (
             direcciones.merge(
