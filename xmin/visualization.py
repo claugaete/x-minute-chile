@@ -9,7 +9,6 @@ from folium.folium import Map
 import geopandas as gpd
 from libpysal.weights import Queen
 import mapclassify
-from mapclassify.classifiers import MapClassifier
 import matplotlib as mpl
 from matplotlib.axes import Axes
 from matplotlib.colors import Colormap, ListedColormap
@@ -355,7 +354,6 @@ class AccessibilityVisualizer:
                 )
             return m
         else:
-
             # project to CRS if basemap has it
             if "crs" in overlay_cfg.basemap_kwds:
                 crs = overlay_cfg.basemap_kwds["crs"]
@@ -531,7 +529,7 @@ class AccessibilityVisualizer:
         column_1: str | pd.Series,
         column_2: str | pd.Series,
         n: int = 3,
-        classifier: type[MapClassifier] = mapclassify.EqualInterval,
+        classifier = mapclassify.EqualInterval,
         color_matrix: np.ndarray | None = None,
         legend: bool = True,
         legend_kwds: dict | None = None,
@@ -557,12 +555,18 @@ class AccessibilityVisualizer:
             Número de clases en las que se va a dividir cada variable. Se
             recomienda mantener `n=3`; valores más altos generan un mapa de
             colores demasiado grande.
-        classifier : type[MapClassifier]
-            Clase correspondiente a un `MapClassifier` de la librería
-            `mapclassify`, que permite dividir los datos de cada serie en
-            "bins" según algún criterio. El inicializador de la clase debe
+        classifier
+            Este parámetro puede ser:
+            - El nombre de una clase correspondiente a un `MapClassifier` de la
+            librería `mapclassify`, que permite dividir los datos de cada serie
+            en "bins" según algún criterio. El inicializador de la clase debe
             recibir un conjunto de datos y un número de clases en las que
             dividir los datos.
+            - Una función que reciba un conjunto de datos y el número de clases
+            en las que dividir los datos, y que retorne un objeto
+            `MapClassifier` con la división. - Una tupla de dos elementos de
+            los mencionados previamente; el primer elemento se usará para
+            clasificar a `column_1`, y el segundo elemento para `column_2`.
         color_matrix : ndarray or None, default: None
             Matriz de colores para asignar a las distintas clases. Debe ser una
             matriz de `n*n`, donde `color_matrix[i, j]` guarda el color
@@ -665,11 +669,18 @@ class AccessibilityVisualizer:
 
         class_1 = f"{column_1.name}_class"
         class_2 = f"{column_2.name}_class"
+        
+        if isinstance(classifier, tuple):
+            classifier_1 = classifier[0]
+            classifier_2 = classifier[1]
+        else:
+            classifier_1 = classifier
+            classifier_2 = classifier
 
         # assign classes for each column and combine the classes
-        split_1 = classifier(column_1, n)
+        split_1 = classifier_1(column_1, n)
         gdf_class[class_1] = split_1.yb
-        split_2 = classifier(column_2, n)
+        split_2 = classifier_2(column_2, n)
         gdf_class[class_2] = split_2.yb
         gdf_class["bivariate_class"] = (
             gdf_class[class_1] * n + gdf_class[class_2]
