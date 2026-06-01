@@ -6,55 +6,59 @@
 
 Cálculo de índices de accesibilidad urbana en el contexto chileno
 
-## Project Organization
+## Organización del proyecto
 
 ```
-├── LICENSE            <- Open-source license if one is chosen
-├── Makefile           <- Makefile with convenience commands like `make data` or `make train`
-├── README.md          <- The top-level README for developers using this project.
+├── LICENSE            <- Licencia MIT
+├── Makefile           <- Makefile para facilitar la ejecución de comandos
+|                         comunes.
+├── README.md          <- ¡El archivo que estás leyendo! Resumen del proyecto,
+|                         sus requisitos y estructura.
 ├── data
-│   ├── external       <- Data from third party sources.
-│   ├── interim        <- Intermediate data that has been transformed.
-│   ├── processed      <- The final, canonical data sets for modeling.
-│   └── raw            <- The original, immutable data dump.
+│   ├── interim        <- Datos intermedios que han sido extraídos y/o
+|   |                     modificados.
+│   ├── processed      <- Datos finales, utilizados en los análisis.
+│   └── raw            <- Datos originales, tal y como fueron descargados.
 │
-├── docs               <- A default mkdocs project; see www.mkdocs.org for details
+├── notebooks          <- Notebooks de Jupyter. Incluye exploración y ejemplos
+|                         de casos de uso de la librería, aplicados al contexto
+|                         chileno.
 │
-├── models             <- Trained and serialized models, model predictions, or model summaries
+├── pyproject.toml     <- Archivo de configuración del proyecto.
 │
-├── notebooks          <- Jupyter notebooks. Naming convention is a number (for ordering),
-│                         the creator's initials, and a short `-` delimited description, e.g.
-│                         `1.0-jqp-initial-data-exploration`.
+├── reports            <- Reportes finales generados (en formato PDF).
+│   └── figures        <- Figuras generadas en los notebooks y utilizadas en
+|                         los reportes.
 │
-├── pyproject.toml     <- Project configuration file with package metadata for 
-│                         xmin and configuration for tools like black
+├── scripts            <- Scripts para la descarga y procesamiento de datos de
+|                         Chile.
 │
-├── references         <- Data dictionaries, manuals, and all other explanatory materials.
+├── uv.lock            <- Lockfile creado por uv.
 │
-├── reports            <- Generated analysis as HTML, PDF, LaTeX, etc.
-│   └── figures        <- Generated graphics and figures to be used in reporting
-│
-├── requirements.txt   <- The requirements file for reproducing the analysis environment, e.g.
-│                         generated with `pip freeze > requirements.txt`
-│
-├── setup.cfg          <- Configuration file for flake8
-│
-└── xmin   <- Source code for use in this project.
+└── xmin   <- Código fuente de la librería xmin.
     │
-    ├── __init__.py             <- Makes xmin a Python module
+    ├── __init__.py             <- Permite que xmin sea un módulo de Python.
     │
-    ├── config.py               <- Store useful variables and configuration
+    ├── amenities.py            <- Generación de necesidades y destinos.
     │
-    ├── dataset.py              <- Scripts to download or generate data
+    ├── config.py               <- Guarda variables de configuración.
     │
-    ├── features.py             <- Code to create features for modeling
+    ├── dataset                 <- Submódulo auxiliar con funciones para
+    |                              descargar y procesar datos.
     │
-    ├── modeling                
-    │   ├── __init__.py 
-    │   ├── predict.py          <- Code to run model inference with trained models          
-    │   └── train.py            <- Code to train models
+    ├── geometry.py             <- Funciones auxiliares para tratar con
+    |                              geometrías.
     │
-    └── plots.py                <- Code to create visualizations
+    ├── indices.py              <- Definición de funciones/índices de
+    |                              accesibilidad.
+    │
+    ├── origins.py              <- Generación de orígenes.
+    │
+    ├── ratings.py              <- Cálculo de puntuaciones de accesibilidad.
+    │
+    ├── travel_time.py          <- Cálculo de matrices de tiempo de viaje.
+    │
+    └── visualization.py        <- Generación de visualizaciones.
 ```
 
 --------
