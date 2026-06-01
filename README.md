@@ -21,7 +21,15 @@ X-Minute Chile fue desarrollado por Claudio Gaete como Memoria para optar al
 título de Ingeniero Civil en Computación en la Universidad de Chile.
 
 ![Comparación de acceso a farmacias en distintas ciudades de
-Chile](reports/figures/multiple_city_comparison.pdf)
+Chile](reports/figures/multiple_city_comparison.png)
+
+## Índice de contenidos
+
+- [Organización del proyecto](#organización-del-proyecto)
+- [Instalación y requisitos](#instalación-y-requisitos)
+    * [Instalación de librería](#instalación-de-librería)
+    * [Ejecución de análisis](#ejecución-de-análisis)
+    * [Dependencias](#dependencias)
 
 ## Organización del proyecto
 
@@ -85,7 +93,7 @@ que se requiere instalarlo para ejecutar el proyecto. Las instrucciones de
 instalación se pueden encontrar
 [aquí](https://docs.astral.sh/uv/getting-started/installation/).
 
-### Instalación de librería y ejecución de análisis
+### Instalación de librería
 
 Para instalar la librería, primero se debe clonar el proyecto y entrar en el
 directorio correspondiente al repositorio.
@@ -97,6 +105,8 @@ cd x-minute-chile
 
 Luego, basta con ejecutar `uv sync` para instalar todas las dependencias
 necesarias para utilizar la librería.
+
+### Ejecución de análisis
 
 Si se desea ejecutar los notebooks con análisis aplicados a Chile, primero se
 deben descargar y procesar los datos necesarios. Para esto, se ejecuta **uno**
