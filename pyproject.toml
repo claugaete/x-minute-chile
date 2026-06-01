@@ -5,7 +5,7 @@ build-backend = "flit_core.buildapi"
 [project]
 name = "xmin"
 version = "0.0.1"
-description = "C\u00e1lculo de \u00edndices de accesibilidad urbana en el contexto chileno"
+description = "C\u00e1lculo de \u00edndices de accesibilidad urbana en el contexto de la ciudad de X minutos"
 authors = [
   { name = "Claudio Gaete" },
 ]
