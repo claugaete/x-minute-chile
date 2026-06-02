@@ -151,7 +151,7 @@ por los cuales se instaló cada una:
     - `quackosm` y `duckdb`: obtención de puntos de interés a partir de
       archivos PBF de OpenStreetMap.
 - Cálculo de tiempos de viaje:
-    - `r5py`:
+    - `r5py`: cálculo de matrices de tiempo de viaje (TTMs).
 - Visualizaciones:
     - `matplotlib`: generación de visualizaciones estáticas.
     - `folium`: generación de visualizaciones interactivas.
