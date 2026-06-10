@@ -1103,7 +1103,7 @@ if __name__ == "__main__":
             "frecuentes",
         ]
         + [f"- {dataset.name}" for dataset in all_datasets]
-        + ["trabajos (requiere base de datos local de Nominatim)"]
+        + ["- trabajos (requiere base de datos local de Nominatim)"]
     )
 
     parser = argparse.ArgumentParser(
