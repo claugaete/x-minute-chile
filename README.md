@@ -129,7 +129,7 @@ Habiendo descargado y procesado los datos, se pueden ejecutar todos los
 notebooks excepto el de [accesibilidad de segundo
 orden](notebooks/use-cases/accessibilidad_segundo_orden.ipynb), pues este
 requiere un previo *geocoding* de direcciones de empleos formales, que no se
-realiza por defecto al procesar los datos. El mismo *notebook* contiene la
+realiza por defecto al procesar los datos. El mismo notebook contiene la
 información necesaria para procesar los datos y poder ejecutar el análisis.
 
 ### Dependencias
