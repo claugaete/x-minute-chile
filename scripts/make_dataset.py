@@ -48,6 +48,7 @@ def unrar(rar_path: Path, out_dir: Path):
     manejar errores si no se logra extraer automáticamente usando `unrar`."""
     rar_path = rar_path.resolve()
     out_dir = out_dir.resolve()
+    makedir(out_dir)
     try:
         subprocess.run(
             ["unrar", "x", "-y", rar_path, out_dir],
