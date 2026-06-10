@@ -1084,8 +1084,8 @@ if __name__ == "__main__":
         make_salud,
         make_farmacias,
         make_educacion,
-        make_areas_verdes,
         make_ferias_libres,
+        make_areas_verdes,
     ]
 
     # datasets que reciben actualizaciones frecuentes (para evitar descargar
