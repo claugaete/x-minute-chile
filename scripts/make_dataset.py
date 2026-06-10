@@ -410,7 +410,7 @@ class MakeSalud(MakeDataset):
     def clean(self):
         print("Extrayendo ZIP...")
         interim_path = INTERIM_DATA_PATH / "amenities" / "salud"
-        gpkg_path = PROCESSED_DATA_PATH / "amenities" / "salud"
+        gpkg_path = PROCESSED_DATA_PATH / "amenities" / "salud.gpkg"
         unzip(self.zip_path, interim_path)
 
         print("Creando archivo GeoPackage...")
