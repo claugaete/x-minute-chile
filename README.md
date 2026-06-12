@@ -60,7 +60,7 @@ Chile](reports/figures/multiple_city_comparison.png)
 │
 ├── uv.lock            <- Lockfile creado por uv.
 │
-└── xmin   <- Código fuente de la librería xmin.
+└── xmin               <- Código fuente de la librería xmin.
     │
     ├── __init__.py             <- Permite que xmin sea un módulo de Python.
     │
