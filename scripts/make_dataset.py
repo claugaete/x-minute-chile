@@ -13,7 +13,6 @@ import zipfile
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 import geopandas as gpd
-import nominatim_api as napi
 import numpy as np
 import pandas as pd
 import quackosm as qosm
@@ -856,7 +855,7 @@ class MakeTrabajos(MakeDataset):
         )
 
     @staticmethod
-    def match_commune(result: napi.SearchResult, commune: str):
+    def match_commune(result, commune: str):
         """Revisa si la comuna del resultado obtenido es igual a la comuna
         buscada. Se asume que la comuna está en mayúsculas."""
         address_row = next(
@@ -874,7 +873,7 @@ class MakeTrabajos(MakeDataset):
         street: str,
         number: str | float,
         city: str,
-        api: napi.NominatimAPIAsync,
+        api,
         semaphore: asyncio.Semaphore,
         attempt: int = 1,
     ):
@@ -966,6 +965,8 @@ class MakeTrabajos(MakeDataset):
         encontraron coordenadas para la dirección entregada).
         """
 
+        import nominatim_api as napi
+        
         df = df.copy()
 
         semaphore = asyncio.Semaphore(max_concurrent)
@@ -1074,7 +1075,6 @@ if __name__ == "__main__":
     make_educacion = MakeEducacion()
     make_areas_verdes = MakeAreasVerdes()
     make_ferias_libres = MakeFeriasLibres()
-    make_trabajos = MakeTrabajos()
 
     all_datasets: list[MakeDataset] = [
         make_osm,
@@ -1133,7 +1133,7 @@ if __name__ == "__main__":
     elif args.dataset == "update":
         datasets_to_process = updated_datasets
     elif args.dataset == "trabajos":
-        datasets_to_process = [make_trabajos]
+        datasets_to_process = [MakeTrabajos()]
     else:
         datasets_to_process = [
             dataset for dataset in all_datasets if dataset.name == args.dataset

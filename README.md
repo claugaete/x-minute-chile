@@ -168,7 +168,8 @@ por los cuales se instaló cada una:
     - `openpyxl`: manejo de datos en formato Excel.
     - `scikit-learn`: métodos de *clustering* para el agrupamiento espacial de
       datos.
-    - `nominatim-api`: *geocoding* de fuentes de empleo formal.
+    - `nominatim-api`: *geocoding* de fuentes de empleo formal (no se instala
+      por defecto).
 - Notebooks: `ipykernel` y `ipywidgets`.
 - Desarrollo:
     - `ruff`: linting y formateo.

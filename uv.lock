@@ -1778,7 +1778,6 @@ dependencies = [
     { name = "mapclassify" },
     { name = "matplotlib" },
     { name = "matplotlib-map-utils" },
-    { name = "nominatim-api" },
     { name = "numpy" },
     { name = "openpyxl" },
     { name = "pandas" },
@@ -1791,6 +1790,11 @@ dependencies = [
     { name = "shapely" },
     { name = "tobler" },
     { name = "tqdm" },
+]
+
+[package.optional-dependencies]
+nominatim = [
+    { name = "nominatim-api" },
 ]
 
 [package.dev-dependencies]
@@ -1812,7 +1816,7 @@ requires-dist = [
     { name = "mapclassify", specifier = ">=2.10.0" },
     { name = "matplotlib", specifier = ">=3.10.8" },
     { name = "matplotlib-map-utils", specifier = ">=4.0.0" },
-    { name = "nominatim-api", specifier = ">=5.3.2" },
+    { name = "nominatim-api", marker = "extra == 'nominatim'", specifier = ">=5.3.2" },
     { name = "numpy", specifier = ">=2.4.4" },
     { name = "openpyxl", specifier = ">=3.1.5" },
     { name = "pandas", specifier = ">=3.0.1" },
@@ -1826,6 +1830,7 @@ requires-dist = [
     { name = "tobler", specifier = ">=0.13.0" },
     { name = "tqdm", specifier = ">=4.67.3" },
 ]
+provides-extras = ["nominatim"]
 
 [package.metadata.requires-dev]
 dev = [{ name = "ruff" }]
