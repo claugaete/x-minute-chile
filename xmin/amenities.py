@@ -102,8 +102,8 @@ class Amenity:
         osm_filter: dict,
         keep_all_tags: bool | list[str] = True,
         bounds: BaseGeometry | None = None,
-        use_area_as_weight: bool = False,
-        area_to_weight_function: Callable[[float], float] = lambda x: x,
+        weight_name: str | None = None,
+        weight_map: dict | Callable | None = None,
     ) -> "Amenity":
         """
         Crea una `Amenity` con puntos generados programáticamente a partir de
@@ -131,16 +131,23 @@ class Amenity:
             Polígono dentro del cual se desean buscar los POIs en OSM. Si no se
             especifica, se buscarán puntos en toda la geometría del archivo
             PBF.
-        use_area_as_weight : bool, default: False
-            Booleano indicando si se utiliza el área de los POIs obtenidos en
-            OSM como referencia para obtener el peso de cada uno.
-        area_to_weight_function : (float) -> float, default: identity
-            Función a utilizar para convertir el área de cada POI en su peso.
-            Es importante considerar que algunos POIs podrían ser puntos (no
-            polígonos), y por ende tener área 0. Podría ser necesario
-            considerar este caso borde a la hora de convertir áreas a pesos (si
-            se utiliza la función identidad, estos puntos tendrían peso 0 y
-            podrían no afectar al resultado final).
+        weight_name : str or None, default: None
+            Nombre de la columna a utilizar para definir el peso relativo de
+            cada POI asociado a la necesidad. Si es `"area"`, se utilizará el
+            área de cada POI. Si es nulo, todos los POIs tendrán un peso por
+            defecto igual a 1.
+        area_to_weight_function : dict, Callable or None, default: None
+            Mapping a utilizar para convertir el valor de `weight_name` área de
+            cada POI a su peso relativo. Puede ser un diccionario (si la
+            columna `weight_name` tiene valores discretos) o una función que
+            recibe un elemento de la columna `weight_name` y retorna el peso
+            asociado.
+            
+            Si `weight_name="area"`, es importante considerar que algunos POIs
+            podrían ser puntos (no polígonos), y por ende tener área 0. Podría
+            ser necesario considerar este caso borde a la hora de convertir
+            áreas a pesos (p. ej. si se utiliza la función identidad, estos
+            puntos tendrían peso 0 y podrían no afectar al resultado final).
 
         Returns
         ---
@@ -161,10 +168,14 @@ class Amenity:
         )
         if isinstance(keep_all_tags, list):
             amenity_gdf = amenity_gdf[["id"] + keep_all_tags + ["geometry"]]
-        if use_area_as_weight:
-            amenity_gdf["weight"] = amenity_gdf.to_crs(
-                config.projected_crs
-            ).area.apply(area_to_weight_function)
+        if weight_name is not None:
+            if weight_name == "area":
+                weight_col = amenity_gdf.to_crs(
+                    config.projected_crs
+                ).area
+            else:
+                weight_col = amenity_gdf[weight_name]
+            amenity_gdf["weight"] = weight_col.map(weight_map)
 
         return cls(name, to_centroids(amenity_gdf))
 
