@@ -87,6 +87,7 @@ class Origins:
                     population_gdf.to_crs(config.projected_crs),
                     h3_grid.to_crs(config.projected_crs),
                     extensive_variables=["population"],
+                    allocate_total=False
                 )
                 .to_crs(4326)
             )
