@@ -166,7 +166,7 @@ class TwoStepFca(IndexFunction):
             travel_times.set_index("from_id")
             .groupby("to_id")
             .agg(calculate_inverse_population)
-            .squeeze()
+            .squeeze(axis=1)
             .rename("inverse_population")
         )
 
@@ -186,7 +186,7 @@ class TwoStepFca(IndexFunction):
             travel_times.set_index("to_id")
             .groupby("from_id")
             .agg(calculate_2sfca)
-            .squeeze()
+            .squeeze(axis=1)
             .rename("accessibility")
         )
 
