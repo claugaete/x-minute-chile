@@ -7,7 +7,7 @@ class Config:
     projected_crs : int or str
         CRS proyectado a utilizar cuando se necesite realizar operaciones
         geométricas (p. ej. encontrar centroies o calcular áreas). Por defecto
-        es 5361 (el CRS proyectado para Chile).
+        se utiliza la proyección de Mollweide.
     quackosm_working_directory : str
         Directorio en el que QuackOSM guarda archivos cacheados. Por defecto es
         `files`.
@@ -20,7 +20,7 @@ class Config:
         leyenda correspondiente, si así se desea. Por defecto es 0.8.  
     """
     
-    projected_crs = 5361
+    projected_crs = "ESRI:54009"
     quackosm_working_directory = "files"
     osmconvert_path = "osmconvert"
     alpha_when_background = 0.8

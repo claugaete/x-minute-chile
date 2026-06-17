@@ -149,8 +149,9 @@ class OverlayConfig:
         Diccionario de argumentos que serán pasados al momento de graficar la
         escala gráfica, con la función `add_basemap` de `contextily`. Si se
         recibe un parámetro `crs`, este será aplicado a todos los elementos de
-        la visualización (incluyendo la escala gráfica si se tiene una, lo cual
-        podría causar warnings si el CRS no está proyectado). Solo se
+        la visualización (a no ser que también se incluya una escala gráfica;
+        en ese caso se utilizará la proyección definida para la escala gráfica,
+        que se puede modificar mediante el parámetro `scalebar_kwds`). Solo se
         considerará este parámetro si la visualización no es interactiva (las
         visualizaciones interactivas vienen con una escala gráfica propia).
     scalebar_kwds : dict, default: {}
@@ -311,8 +312,10 @@ class AccessibilityVisualizer:
                 self._amenities.values()
             )
 
-        if overlay_cfg.show_roads and not overlay_cfg.roads_gdf:
-            if overlay_cfg.roads_pbf_path:
+        if overlay_cfg.show_roads:
+            if overlay_cfg.roads_gdf is not None:
+                roads_gdf = overlay_cfg.roads_gdf
+            elif overlay_cfg.roads_pbf_path is not None:
                 roads_gdf = self._get_roads(
                     overlay_cfg.roads_pbf_path,
                     self._origins.regions.union_all(),
@@ -354,26 +357,34 @@ class AccessibilityVisualizer:
                 )
             return m
         else:
-            # project to CRS if basemap has it
-            if "crs" in overlay_cfg.basemap_kwds:
-                crs = overlay_cfg.basemap_kwds["crs"]
-                gdf_to_plot = gdf_to_plot.to_crs(crs)
-                regions_to_plot = regions_to_plot.to_crs(crs)
-                if overlay_cfg.show_amenities:
-                    amenities_to_plot = amenities_to_plot.to_crs(crs)
-                if overlay_cfg.show_roads:
-                    roads_gdf = roads_gdf.to_crs(config.projected_crs)
-            # for the scalebar to show correct distances, we need to project
-            # the plots
-            elif overlay_cfg.show_scalebar:
-                gdf_to_plot = gdf_to_plot.to_crs(config.projected_crs)
-                regions_to_plot = regions_to_plot.to_crs(config.projected_crs)
-                if overlay_cfg.show_amenities:
-                    amenities_to_plot = amenities_to_plot.to_crs(
-                        config.projected_crs
-                    )
-                if overlay_cfg.show_roads:
-                    roads_gdf = roads_gdf.to_crs(config.projected_crs)
+            # obtain projection for visualization
+            # 1. use scalebar's projection if it is shown
+            # 2. if not, use basemap's projection if it is shown
+            # 3. if not, default to the current projection (4326)
+            crs = gdf_to_plot.crs
+            if overlay_cfg.show_scalebar:
+                if (
+                    "bar" in overlay_cfg.scalebar_kwds
+                    and "projection" in overlay_cfg.scalebar_kwds["bar"]
+                ):
+                    crs = overlay_cfg.scalebar_kwds["bar"]["projection"]
+                else:
+                    # estimate UTM CRS if one is not given
+                    crs = gdf_to_plot.estimate_utm_crs()
+            elif overlay_cfg.show_basemap:
+                if "crs" in overlay_cfg.basemap_kwds:
+                    crs = overlay_cfg.basemap_kwds["crs"]
+                else:
+                    # use web mercator if CRS is not given
+                    crs = 3857
+
+            # reproject all geodataframes
+            gdf_to_plot = gdf_to_plot.to_crs(crs)
+            regions_to_plot = regions_to_plot.to_crs(crs)
+            if overlay_cfg.show_amenities:
+                amenities_to_plot = amenities_to_plot.to_crs(crs)
+            if overlay_cfg.show_roads:
+                roads_gdf = roads_gdf.to_crs(crs)
 
             default_plot_kwds = {
                 "alpha": (
@@ -529,7 +540,7 @@ class AccessibilityVisualizer:
         column_1: str | pd.Series,
         column_2: str | pd.Series,
         n: int = 3,
-        classifier = mapclassify.EqualInterval,
+        classifier=mapclassify.EqualInterval,
         color_matrix: np.ndarray | None = None,
         legend: bool = True,
         legend_kwds: dict | None = None,
@@ -669,7 +680,7 @@ class AccessibilityVisualizer:
 
         class_1 = f"{column_1.name}_class"
         class_2 = f"{column_2.name}_class"
-        
+
         if isinstance(classifier, tuple):
             classifier_1 = classifier[0]
             classifier_2 = classifier[1]
