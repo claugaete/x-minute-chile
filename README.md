@@ -9,7 +9,11 @@
 X-Minute Chile is a project focused on calculating urban accessibility indices
 for different Chilean cities, in the context of the X-minute city concept (a
 generalization of the [15-minute
-city](https://en.wikipedia.org/wiki/15-minute_city)). The project consists of: a library called `xmin`, which provides tools for calculating accessibility indices flexibly and reproducibly for urban areas around the world; and scripts and notebooks that utilize `xmin` to analyze accessibility in different Chilean cities and exemplify use cases for the library.
+city](https://en.wikipedia.org/wiki/15-minute_city)). The project consists of:
+a library called `xmin`, which provides tools for calculating accessibility
+indices flexibly and reproducibly for urban areas around the world; and scripts
+and notebooks that utilize `xmin` to analyze accessibility in different Chilean
+cities and exemplify use cases for the library.
 
 The directory [`notebooks/en`](notebooks/en) contains Jupyter notebooks written
 in English, applying `xmin` in multiple contexts (including an analysis of
