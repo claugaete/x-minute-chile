@@ -142,6 +142,11 @@ class OverlayConfig:
         destinos asociados a esas necesidades.
     show_roads : bool, default: False
         Si se mostrarán caminos para contextualizar la región de análisis.
+    min_population : float or None, default: None
+        Población mínima que requiere una celda para que se presente en la
+        visualización. Esto no afecta el cálculo de la accesibilidad ni la
+        composición de las regiones del análisis, ya que estan son definidas
+        previamente en el objeto `Origins` asociado.
     borders_kwds : dict, default: {}
         Diccionario de argumentos que serán pasados al momento de graficar las
         fronteras.
@@ -181,6 +186,7 @@ class OverlayConfig:
     show_scalebar: bool = False
     show_amenities: bool | list[Amenity | str] = False
     show_roads: bool = False
+    min_population: float | None = None
     borders_kwds: dict = field(default_factory=dict)
     basemap_kwds: dict = field(default_factory=dict)
     scalebar_kwds: dict = field(default_factory=dict)
@@ -329,6 +335,11 @@ class AccessibilityVisualizer:
 
         col_name = values.name
         gdf_to_plot = self._gdf.copy()
+        if overlay_cfg.min_population is not None:
+            gdf_to_plot = gdf_to_plot[
+                self._origins.h3_grid.set_index("id")["population"]
+                >= overlay_cfg.min_population
+            ]
         gdf_to_plot[col_name] = values
         regions_to_plot = self._origins.regions.copy()
 
