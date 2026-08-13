@@ -251,7 +251,15 @@ class TravelTimeMatrices:
             varios órdenes de magnitud el tamaño del DataFrame resultante
             (especialmente si se tiene un área urbana grande y tiempos de viaje
             cortos).
-        invert_order : TODO
+        invert_order : bool, default: False
+            Invierte el sentido del viaje a la hora de calcular las TTMs (es
+            decir, los viajes se calculan desde cada destino hacia los
+            orígenes). Esto puede resultar en una ganancia de tiempo de varios
+            órdenes de magnitud si la cantidad de destinos es mucho menor que
+            la cantidad de orígenes, pero también afecta los resultados
+            obtenidos si se utilizan medios de transporte que recorren rutas
+            distintas según el sentido (por ejemplo, buses en el transporte
+            público o bicicletas).
         **kwargs
             Argumentos que serán pasados al cálculo de la TTM. Puede ser
             cualquier argumento que se pueda pasar a `r5py.RegionalTask`
