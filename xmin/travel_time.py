@@ -107,6 +107,7 @@ def compute_matrix(
     destinations: gpd.GeoDataFrame,
     chunk_size: int | None,
     dropna: bool,
+    invert_order: bool,
     **kwargs,
 ) -> pd.DataFrame:
     """
@@ -117,7 +118,10 @@ def compute_matrix(
     permitiendo agregar una barra de progreso.
     """
 
-    print("Calculando tiempos de viaje desde cada origen...")
+    print(
+        "Calculando tiempos de viaje desde cada "
+        f"{'destino' if invert_order else 'origen'}..."
+    )
 
     if chunk_size is None:
         return r5py.TravelTimeMatrix(
@@ -201,6 +205,7 @@ class TravelTimeMatrices:
         snap_street_mode: r5py.TransportMode | str = r5py.TransportMode.CAR,
         chunk_size: int | None = 32,
         dropna: bool = True,
+        invert_order: bool = False,
         **kwargs,
     ) -> "TravelTimeMatrices":
         """
@@ -246,6 +251,7 @@ class TravelTimeMatrices:
             varios órdenes de magnitud el tamaño del DataFrame resultante
             (especialmente si se tiene un área urbana grande y tiempos de viaje
             cortos).
+        invert_order : TODO
         **kwargs
             Argumentos que serán pasados al cálculo de la TTM. Puede ser
             cualquier argumento que se pueda pasar a `r5py.RegionalTask`
@@ -282,14 +288,30 @@ class TravelTimeMatrices:
             )
 
         # calculate matrix
-        travel_time_matrix = compute_matrix(
-            transport_network,
-            origins=origin_points_gdf,
-            destinations=all_amenities,
-            chunk_size=chunk_size,
-            dropna=dropna,
-            **kwargs,
-        )
+        if invert_order:
+            travel_time_matrix = (
+                compute_matrix(
+                    transport_network,
+                    origins=all_amenities,
+                    destinations=origin_points_gdf,
+                    chunk_size=chunk_size,
+                    dropna=dropna,
+                    invert_order=invert_order,
+                    **kwargs,
+                )
+                .rename(columns={"from_id": "to_id", "to_id": "from_id"})
+                .reindex(columns=["from_id", "to_id", "travel_time"])
+            )
+        else:
+            travel_time_matrix = compute_matrix(
+                transport_network,
+                origins=origin_points_gdf,
+                destinations=all_amenities,
+                chunk_size=chunk_size,
+                dropna=dropna,
+                invert_order=invert_order,
+                **kwargs,
+            )
         travel_time_matrix["_amenity_id"] = travel_time_matrix.merge(
             all_amenities[["id", "_amenity_id"]],
             left_on="to_id",
@@ -356,11 +378,11 @@ class TravelTimeMatrices:
                 ].agg(
                     {
                         "weight": "sum",
-                        "geometry": lambda geoms: geoms.to_crs(
-                            config.projected_crs
-                        )
-                        .union_all()
-                        .centroid,
+                        "geometry": lambda geoms: (
+                            geoms.to_crs(config.projected_crs)
+                            .union_all()
+                            .centroid
+                        ),
                     }
                 ),
                 crs=config.projected_crs,
@@ -371,9 +393,7 @@ class TravelTimeMatrices:
         )
         grouped_gdf["name"] = grouped_gdf["id"]
         self._matrices[amenity_name] = grouped_ttm
-        self._amenities[amenity_name] = Amenity(
-            amenity_name, grouped_gdf
-        )
+        self._amenities[amenity_name] = Amenity(amenity_name, grouped_gdf)
 
 
 def _check_origin_equality(ttms_list: list[TravelTimeMatrices]):
