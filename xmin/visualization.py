@@ -142,9 +142,12 @@ class OverlayConfig:
         destinos asociados a esas necesidades.
     show_roads : bool, default: False
         Si se mostrarán caminos para contextualizar la región de análisis.
-    min_population : float or None, default: None
-        Población mínima que requiere una celda para que se presente en la
-        visualización. Esto no afecta el cálculo de la accesibilidad ni la
+    min_population : float | tuple[float, int] | None, default: None
+        Si se recibe un número, será la población mínima que requiere una celda
+        para que se presente en la visualización. Si se recibe una tupla
+        `(min_population, n_cells)`, solo se eliminarán grupos de `n_cells`
+        celdas contiguas, donde cada celda tenga una población menor que
+        `min_population`. Esto no afecta el cálculo de la accesibilidad ni la
         composición de las regiones del análisis, ya que estan son definidas
         previamente en el objeto `Origins` asociado.
     borders_kwds : dict, default: {}
@@ -186,7 +189,7 @@ class OverlayConfig:
     show_scalebar: bool = False
     show_amenities: bool | list[Amenity | str] = False
     show_roads: bool = False
-    min_population: float | None = None
+    min_population: float | tuple[float, int] | None = None
     borders_kwds: dict = field(default_factory=dict)
     basemap_kwds: dict = field(default_factory=dict)
     scalebar_kwds: dict = field(default_factory=dict)
@@ -336,10 +339,34 @@ class AccessibilityVisualizer:
         col_name = values.name
         gdf_to_plot = self._gdf.copy()
         if overlay_cfg.min_population is not None:
-            gdf_to_plot = gdf_to_plot[
-                self._origins.h3_grid.set_index("id")["population"]
-                >= overlay_cfg.min_population
-            ]
+            if isinstance(overlay_cfg.min_population, (int, float)):
+                # if min_population is a number, we remove cells with a lower
+                # population
+                gdf_to_plot = gdf_to_plot[
+                    self._origins.h3_grid.set_index("id")["population"]
+                    >= overlay_cfg.min_population
+                ]
+            else:
+                # if it's a tuple, we remove only contiguous groups of more
+                # than n_cells with a lower population than min_population
+                min_population, n_cells = overlay_cfg.min_population
+                candidate_cells = gdf_to_plot[
+                    self._origins.h3_grid.set_index("id")["population"]
+                    < min_population
+                ].copy()
+                w = Queen.from_dataframe(
+                    candidate_cells, use_index=True, silence_warnings=True
+                )
+                candidate_cells["component"] = w.component_labels
+                candidate_cells["cells_in_comp"] = candidate_cells[
+                    "component"
+                ].map(candidate_cells["component"].value_counts())
+                gdf_to_plot = gdf_to_plot.drop(
+                    candidate_cells[
+                        candidate_cells["cells_in_comp"] >= n_cells
+                    ].index
+                )
+
         gdf_to_plot[col_name] = values
         regions_to_plot = self._origins.regions.copy()
 
