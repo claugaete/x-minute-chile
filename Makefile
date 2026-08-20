@@ -49,26 +49,6 @@ format:
 	uv run ruff format
 
 
-
-
-
-## Set up Python interpreter environment
-.PHONY: create_environment
-create_environment:
-	uv venv --python $(PYTHON_VERSION)
-	@echo ">>> New uv virtual environment created. Activate with:"
-	@echo ">>> Windows: .\\\\.venv\\\\Scripts\\\\activate"
-	@echo ">>> Unix/macOS: source ./.venv/bin/activate"
-	
-
-
-
-#################################################################################
-# PROJECT RULES                                                                 #
-#################################################################################
-
-
-
 #################################################################################
 # Self Documenting Commands                                                     #
 #################################################################################
@@ -85,4 +65,4 @@ endef
 export PRINT_HELP_PYSCRIPT
 
 help:
-	@$(PYTHON_INTERPRETER) -c "${PRINT_HELP_PYSCRIPT}" < $(MAKEFILE_LIST)
+	uv run $(PYTHON_INTERPRETER) -c "${PRINT_HELP_PYSCRIPT}" < $(MAKEFILE_LIST)
