@@ -82,15 +82,12 @@ class Origins:
                     "`population_gdf` debe tener al menos las columnas "
                     "`population` y `geometry`"
                 )
-            h3_grid = (
-                area_interpolate(
-                    population_gdf.to_crs(config.projected_crs),
-                    h3_grid.to_crs(config.projected_crs),
-                    extensive_variables=["population"],
-                    allocate_total=False
-                )
-                .to_crs(4326)
-            )
+            h3_grid = area_interpolate(
+                population_gdf.to_crs(config.projected_crs),
+                h3_grid.to_crs(config.projected_crs),
+                extensive_variables=["population"],
+                allocate_total=False,
+            ).to_crs(4326)
 
         h3_grid = h3_grid.rename_axis("id").reset_index()
 

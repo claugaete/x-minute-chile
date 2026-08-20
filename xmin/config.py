@@ -1,7 +1,7 @@
 class Config:
     """
     Variables de configuración de la librería.
-    
+
     Attributes
     ---
     projected_crs : int or str
@@ -17,12 +17,13 @@ class Config:
         Opacidad a utilizar por defecto cuando se muestran los caminos o un
         mapa base detrás de una visualización. Puede ser útil para asegurarse
         que el color de las celdas en el gráfico sea igual al color de la
-        leyenda correspondiente, si así se desea. Por defecto es 0.8.  
+        leyenda correspondiente, si así se desea. Por defecto es 0.8.
     """
-    
+
     projected_crs = "ESRI:54009"
     quackosm_working_directory = "files"
     osmconvert_path = "osmconvert"
     alpha_when_background = 0.8
-    
+
+
 config = Config()

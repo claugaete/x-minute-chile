@@ -6,5 +6,5 @@ __all__ = [
     "clean_gtfs_frequencies",
     "clean_gtfs_basic",
     "extract_osm_subset",
-    "clean_parks"
+    "clean_parks",
 ]

@@ -33,7 +33,6 @@ def shapely_to_osmosis_polygon(
     if isinstance(poly, Polygon):
         poly = MultiPolygon([poly])
     for i, subpoly in enumerate(poly.geoms):
-
         # exterior coords
         lines.append(str(i))
         for x, y in subpoly.exterior.coords:
@@ -61,7 +60,7 @@ def extract_osm_subset(
     osmconvert esté instalado en el sistema; si osmconvert no está en el PATH,
     se debe modificar la variable `xmin.config.osmconvert_path` a la ruta del
     ejecutable.
-    
+
     Descarga de osmconvert: https://wiki.openstreetmap.org/wiki/Osmconvert
 
     Parameters

@@ -93,8 +93,8 @@ class Amenity:
             )
             # if not, convert to centroids
             self._amenity_gdf = to_centroids(self._amenity_gdf)
-    
-    @classmethod        
+
+    @classmethod
     def from_osm(
         cls,
         name: str,
@@ -142,7 +142,7 @@ class Amenity:
             columna `weight_name` tiene valores discretos) o una función que
             recibe un elemento de la columna `weight_name` y retorna el peso
             asociado.
-            
+
             Si `weight_name="area"`, es importante considerar que algunos POIs
             podrían ser puntos (no polígonos), y por ende tener área 0. Podría
             ser necesario considerar este caso borde a la hora de convertir
@@ -170,9 +170,7 @@ class Amenity:
             amenity_gdf = amenity_gdf[["id"] + keep_all_tags + ["geometry"]]
         if weight_name is not None:
             if weight_name == "area":
-                weight_col = amenity_gdf.to_crs(
-                    config.projected_crs
-                ).area
+                weight_col = amenity_gdf.to_crs(config.projected_crs).area
             else:
                 weight_col = amenity_gdf[weight_name]
             amenity_gdf["weight"] = weight_col.map(weight_map)

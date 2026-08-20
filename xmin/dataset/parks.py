@@ -104,7 +104,6 @@ def clean_parks(
             )
 
         for geom in geoms.geoms:
-
             # generate entry points
             inter = geom.exterior.intersection(pedestrian_network_union)
             if inter.is_empty:

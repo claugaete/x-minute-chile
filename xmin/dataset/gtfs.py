@@ -134,15 +134,21 @@ def clean_gtfs_frequencies(
     freq_trip_ids = set(raw_feed.frequencies["trip_id"])
     all_trip_ids = set(raw_feed.trips["trip_id"])
     diff_trip_ids = all_trip_ids.difference(freq_trip_ids)
-    missing_trips_df = raw_feed.trips[raw_feed.trips["trip_id"].isin(diff_trip_ids)]
-    missing_stop_times_df = raw_feed.stop_times[raw_feed.stop_times["trip_id"].isin(diff_trip_ids)]
+    missing_trips_df = raw_feed.trips[
+        raw_feed.trips["trip_id"].isin(diff_trip_ids)
+    ]
+    missing_stop_times_df = raw_feed.stop_times[
+        raw_feed.stop_times["trip_id"].isin(diff_trip_ids)
+    ]
 
     # assign names to stops that lack them
     stops_df = raw_feed.stops
     stops_df["stop_name"] = stops_df["stop_name"].fillna(stops_df["stop_id"])
-    
+
     trips_df = pd.concat(trips_chunks + [missing_trips_df], ignore_index=True)
-    stop_times_df = pd.concat(stop_times_chunks + [missing_stop_times_df], ignore_index=True)
+    stop_times_df = pd.concat(
+        stop_times_chunks + [missing_stop_times_df], ignore_index=True
+    )
     del trips_chunks, stop_times_chunks, freq_trips
 
     print("(4/4) Escribiendo archivos...")

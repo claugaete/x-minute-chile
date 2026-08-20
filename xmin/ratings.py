@@ -341,7 +341,6 @@ class AccessibilityRatings:
                 cols_to_agg
             ].mean()
         else:
-
             old_population = old_origins.set_index("id")["population"]
 
             def weighted_average(df: pd.DataFrame):
